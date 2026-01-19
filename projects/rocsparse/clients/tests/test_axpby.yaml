@@ -1,5 +1,5 @@
 # ########################################################################
-# Copyright (C) 2020-2025 Advanced Micro Devices, Inc. All rights Reserved.
+# Copyright (C) 2020-2026 Advanced Micro Devices, Inc. All rights Reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -43,7 +43,7 @@ Tests:
   alphai: [1.0]
   beta: [0.0, 1.0, 1.9]
   betai: [0.0, 0.3]
-  baseA: [rocsparse_index_base_zero, rocsparse_index_base_one]
+  baseA: [rocsparse_index_base_zero]
 
 - name: axpby
   category: quick
@@ -54,7 +54,7 @@ Tests:
   nnz: [10, 20]
   alpha: [0.3]
   beta: [0.0]
-  baseA: [rocsparse_index_base_zero, rocsparse_index_base_one]
+  baseA: [rocsparse_index_base_one]
 
 - name: axpby
   category: quick
@@ -65,7 +65,7 @@ Tests:
   nnz: [104, 278]
   alpha: [0.1]
   beta: [0.5]
-  baseA: [rocsparse_index_base_zero, rocsparse_index_base_one]
+  baseA: [rocsparse_index_base_zero]
 
 - name: axpby
   category: pre_checkin
@@ -73,12 +73,12 @@ Tests:
   indextype: *i32_i64
   precision: *single_double_precisions_complex_real
   M: [15332, 22031, 31958]
-  nnz: [0, 1543, 7111, 10000]
+  nnz: [0, 1543, 7111, 10000, 15332]
   alpha: [0.3]
   alphai: [-0.2, 1.7]
   beta: [1.2]
   betai: [-1.1, 0.26]
-  baseA: [rocsparse_index_base_one]
+  baseA: [rocsparse_index_base_zero, rocsparse_index_base_one]
 
 - name: axpby
   category: pre_checkin
@@ -89,7 +89,7 @@ Tests:
   nnz: [11000]
   alpha: [0.3]
   beta: [0.0]
-  baseA: [rocsparse_index_base_zero]
+  baseA: [rocsparse_index_base_zero, rocsparse_index_base_one]
 
 - name: axpby
   category: pre_checkin
@@ -100,20 +100,7 @@ Tests:
   nnz: [15710]
   alpha: [0.4]
   beta: [1.0]
-  baseA: [rocsparse_index_base_zero]
-
-- name: axpby
-  category: nightly
-  function: axpby
-  indextype: *i32_i64
-  precision: *single_double_precisions_complex_real
-  M: [735519, 1452387, 7834525]
-  nnz: [23512, 84412, 311983]
-  alpha: [-7.2]
-  alphai: [0.732]
-  beta: [-0.9]
-  betai: [2.2]
-  baseA: [rocsparse_index_base_zero]
+  baseA: [rocsparse_index_base_zero, rocsparse_index_base_one]
 
 - name: axpby_graph_test
   category: pre_checkin
@@ -128,3 +115,16 @@ Tests:
   betai: [0.3]
   baseA: [rocsparse_index_base_zero]
   graph_test: true
+
+- name: axpby
+  category: nightly
+  function: axpby
+  indextype: *i32_i64
+  precision: *single_double_precisions_complex_real
+  M: [735519, 1452387, 7834525]
+  nnz: [23512, 84412, 311983]
+  alpha: [-7.2]
+  alphai: [0.732]
+  beta: [-0.9]
+  betai: [2.2]
+  baseA: [rocsparse_index_base_zero]
