@@ -483,11 +483,12 @@ public:
         J                    K       = arg.K;
         rocsparse_operation  trans_A = arg.transA;
         rocsparse_operation  trans_B = arg.transB;
-        rocsparse_index_base base    = arg.baseA;
+        rocsparse_index_base base    = arg.baseC;
         rocsparse_sddmm_alg  alg     = arg.sddmm_alg;
         rocsparse_datatype   ttype   = get_datatype<T>();
         rocsparse_order      order_A = arg.order;
         rocsparse_order      order_B = arg.orderB;
+
         // Create rocsparse handle
         rocsparse_local_handle handle(arg);
 

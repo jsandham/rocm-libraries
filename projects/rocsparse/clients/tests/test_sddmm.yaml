@@ -32,39 +32,145 @@ Definitions:
   - &alpha_beta_range_pre_checkin
     - { alpha:   0.0, beta:  1.0, alphai:  1.0, betai: -0.5 }
     - { alpha:   2.0, beta: -2.0, alphai:  1.0, betai: -0.5 }
+  - &alpha_beta_range_nightly
+    - { alpha:   1.0, beta:  1.0, alphai:  1.0, betai: 1.5 }
 
 Tests:
-#
-# CHECKIN
-#
+# QUICK
+- name: sddmm
+  category: quick
+  function: sddmm
+  indextype: *i64
+  precision: *single_only_precisions
+  M: [12, 16, 43]
+  N: [93, 130, 220]
+  K: [3, 34, 59]
+  alpha_beta: *alpha_beta_range_quick
+  transA: [rocsparse_operation_none]
+  transB: [rocsparse_operation_none]
+  baseC: [rocsparse_index_base_zero]
+  order: [rocsparse_order_column]
+  orderB: [rocsparse_order_column]
+  sddmm_alg: [rocsparse_sddmm_alg_default, rocsparse_sddmm_alg_dense]
+  matrix: [rocsparse_matrix_random]
+  formatC: [rocsparse_format_coo, 
+            rocsparse_format_coo_aos,
+            rocsparse_format_csr,
+            rocsparse_format_csc,
+            rocsparse_format_ell]
+
+- name: sddmm
+  category: quick
+  function: sddmm
+  indextype: *i64
+  precision: *single_only_precisions_complex
+  M: [1097]
+  N: [1201]
+  K: [45]
+  alpha_beta: *alpha_beta_range_quick
+  transA: [rocsparse_operation_none]
+  transB: [rocsparse_operation_transpose]
+  baseC: [rocsparse_index_base_one]
+  order: [rocsparse_order_column]
+  orderB: [rocsparse_order_column]
+  sddmm_alg: [rocsparse_sddmm_alg_default, rocsparse_sddmm_alg_dense]
+  matrix: [rocsparse_matrix_random]
+  formatC: [rocsparse_format_coo, 
+            rocsparse_format_coo_aos,
+            rocsparse_format_csr,
+            rocsparse_format_csc,
+            rocsparse_format_ell]
+
+- name: sddmm_file
+  category: quick
+  function: sddmm
+  indextype: *i32
+  precision: *single_only_precisions
+  M: 1
+  N: 1
+  K: [1, 2, 3, 4, 5, 6, 7, 8]
+  alpha_beta: *alpha_beta_range_quick
+  transA: [rocsparse_operation_none]
+  transB: [rocsparse_operation_transpose]
+  order: [rocsparse_order_column]
+  orderB: [rocsparse_order_column]
+  matrix: [rocsparse_matrix_file_rocalution]
+  sddmm_alg: [rocsparse_sddmm_alg_default]
+  order: [rocsparse_order_row]
+  filename: [nos1,
+             nos2,
+             nos3,
+             nos4,
+             nos5,
+             nos6,
+             nos7]
+  formatC: [rocsparse_format_coo, 
+            rocsparse_format_coo_aos,
+            rocsparse_format_csr,
+            rocsparse_format_csc,
+            rocsparse_format_ell]
+
+- name: sddmm
+  category: quick
+  function: sddmm
+  indextype: *i64
+  precision: [*float16_float16_float16_float32_abct_precision, 
+              *bfloat16_bfloat16_bfloat16_float32_abct_precision]
+  M: [434, 576]
+  N: [487, 435]
+  K: [1262, 776]
+  alpha_beta: *alpha_beta_range_quick
+  transA: [rocsparse_operation_none]
+  transB: [rocsparse_operation_none]
+  baseC: [rocsparse_index_base_zero]
+  order: [rocsparse_order_column]
+  orderB: [rocsparse_order_column]
+  sddmm_alg: [rocsparse_sddmm_alg_default]
+  matrix: [rocsparse_matrix_random]
+  formatC: [rocsparse_format_coo,
+            rocsparse_format_coo_aos,
+            rocsparse_format_csr,
+            rocsparse_format_csc,
+            rocsparse_format_ell]
+
+# PRE-CHECKIN
 - name: sddmm_bad_arg
   category: pre_checkin
   function: sddmm_bad_arg
-  indextype: *i32i32_i64i32_i64i64
-  precision: *single_double_precisions_complex_real
-  formatC: [rocsparse_format_coo,rocsparse_format_coo_aos,rocsparse_format_csr,rocsparse_format_csc,rocsparse_format_ell]
+  indextype: *i32
+  precision: *single_only_precisions
+  formatC: [rocsparse_format_coo,
+            rocsparse_format_coo_aos,
+            rocsparse_format_csr,
+            rocsparse_format_csc,
+            rocsparse_format_ell]
 
 - name: sddmm
   category: pre_checkin
   function: sddmm
-  indextype: *i32i32_i64i32_i64i64
+  indextype: *i64
   precision: *single_double_precisions_complex_real
-  M: [2,4,8]
-  N: [1,4,8]
-  K: [1,2,8]
+  M: [2, 4, 8]
+  N: [1, 4, 8]
+  K: [1, 2, 8]
   alpha_beta: *alpha_beta_range_pre_checkin
   transA: [rocsparse_operation_none, rocsparse_operation_transpose]
   transB: [rocsparse_operation_none, rocsparse_operation_transpose]
   baseC: [rocsparse_index_base_one]
-  order: [rocsparse_order_row]
-  sddmm_alg: [rocsparse_sddmm_alg_default, rocsparse_sddmm_alg_dense]
+  order: [rocsparse_order_column]
+  orderB: [rocsparse_order_column]
+  sddmm_alg: [rocsparse_sddmm_alg_default]
   matrix: [rocsparse_matrix_random]
-  formatC: [rocsparse_format_coo,rocsparse_format_coo_aos,rocsparse_format_csr,rocsparse_format_csc,rocsparse_format_ell]
+  formatC: [rocsparse_format_coo,
+            rocsparse_format_coo_aos,
+            rocsparse_format_csr,
+            rocsparse_format_csc,
+            rocsparse_format_ell]
 
 - name: sddmm
   category: pre_checkin
   function: sddmm
-  indextype: *i32i32_i64i32_i64i64
+  indextype: *i64i32
   precision: *single_double_precisions
   M: [256, 512]
   N: [256, 512]
@@ -74,33 +180,48 @@ Tests:
   transB: [rocsparse_operation_none]
   baseC: [rocsparse_index_base_zero]
   order: [rocsparse_order_column]
-  sddmm_alg: [rocsparse_sddmm_alg_default, rocsparse_sddmm_alg_dense]
+  orderB: [rocsparse_order_column]
+  sddmm_alg: [rocsparse_sddmm_alg_default]
   matrix: [rocsparse_matrix_random]
-  formatC: [rocsparse_format_coo,rocsparse_format_coo_aos,rocsparse_format_csr,rocsparse_format_csc,rocsparse_format_ell]
+  formatC: [rocsparse_format_coo,
+            rocsparse_format_coo_aos,
+            rocsparse_format_csr,
+            rocsparse_format_csc,
+            rocsparse_format_ell]
 
 - name: sddmm_file
   category: pre_checkin
   function: sddmm
-  indextype: *i32i32_i64i32_i64i64
-  precision: *single_double_precisions
+  indextype: *i32
+  precision: *double_only_precisions
   M: 1
   N: 1
-  K: [4, 8]
+  K: [9, 10, 11, 12, 13, 14, 15, 16]
   alpha_beta: *alpha_beta_range_pre_checkin
   transA: [rocsparse_operation_none]
   transB: [rocsparse_operation_transpose]
-  baseA: [rocsparse_index_base_one]
-  matrix: [rocsparse_matrix_file_rocalution]
-  sddmm_alg: [rocsparse_sddmm_alg_default, rocsparse_sddmm_alg_dense]
+  baseC: [rocsparse_index_base_one]
   order: [rocsparse_order_column]
-  filename: [nos3,
-             nos4]
-  formatC: [rocsparse_format_coo,rocsparse_format_coo_aos,rocsparse_format_csr,rocsparse_format_csc,rocsparse_format_ell]
+  orderB: [rocsparse_order_column]
+  matrix: [rocsparse_matrix_file_rocalution]
+  sddmm_alg: [rocsparse_sddmm_alg_default]
+  filename: [nos1,
+             nos2,
+             nos3,
+             nos4,
+             nos5,
+             nos6,
+             nos7]
+  formatC: [rocsparse_format_coo,
+            rocsparse_format_coo_aos,
+            rocsparse_format_csr,
+            rocsparse_format_csc,
+            rocsparse_format_ell]
 
 - name: sddmm
   category: pre_checkin
   function: sddmm
-  indextype: *i32i32_i64i32_i64i64
+  indextype: *i64
   precision: *float16_float16_float32_float32_abct_precision
   M: [457, 879]
   N: [254, 586]
@@ -110,14 +231,19 @@ Tests:
   transB: [rocsparse_operation_none]
   baseC: [rocsparse_index_base_zero]
   order: [rocsparse_order_column]
-  sddmm_alg: [rocsparse_sddmm_alg_default, rocsparse_sddmm_alg_dense]
+  orderB: [rocsparse_order_column]
+  sddmm_alg: [rocsparse_sddmm_alg_default]
   matrix: [rocsparse_matrix_random]
-  formatC: [rocsparse_format_coo,rocsparse_format_coo_aos,rocsparse_format_csr,rocsparse_format_csc,rocsparse_format_ell]
+  formatC: [rocsparse_format_coo,
+            rocsparse_format_coo_aos,
+            rocsparse_format_csr,
+            rocsparse_format_csc,
+            rocsparse_format_ell]
 
 - name: sddmm
   category: pre_checkin
   function: sddmm
-  indextype: *i32i32_i64i32_i64i64
+  indextype: *i64i32
   precision: *float16_float16_float16_float16_abct_precision
   M: [386, 912]
   N: [512, 687]
@@ -127,15 +253,20 @@ Tests:
   transB: [rocsparse_operation_none]
   baseC: [rocsparse_index_base_zero]
   order: [rocsparse_order_column]
-  sddmm_alg: [rocsparse_sddmm_alg_default, rocsparse_sddmm_alg_dense]
+  orderB: [rocsparse_order_column]
+  sddmm_alg: [rocsparse_sddmm_alg_default]
   matrix: [rocsparse_matrix_random]
-  formatC: [rocsparse_format_coo,rocsparse_format_coo_aos,rocsparse_format_csr,rocsparse_format_csc,rocsparse_format_ell]
+  formatC: [rocsparse_format_coo,
+            rocsparse_format_coo_aos,
+            rocsparse_format_csr,
+            rocsparse_format_csc,
+            rocsparse_format_ell]
 
 
 - name: sddmm_graph_test
   category: pre_checkin
   function: sddmm
-  indextype: *i32i32_i64i32_i64i64
+  indextype: *i32
   precision: *single_double_precisions
   M: [12, 16, 43]
   N: [93, 130, 220]
@@ -145,134 +276,103 @@ Tests:
   transB: [rocsparse_operation_none]
   baseC: [rocsparse_index_base_zero]
   order: [rocsparse_order_column]
+  orderB: [rocsparse_order_column]
   sddmm_alg: [rocsparse_sddmm_alg_default]
   matrix: [rocsparse_matrix_random]
-  formatC: [rocsparse_format_coo,rocsparse_format_coo_aos,rocsparse_format_csr,rocsparse_format_csc,rocsparse_format_ell]
+  formatC: [rocsparse_format_coo,
+            rocsparse_format_coo_aos,
+            rocsparse_format_csr,
+            rocsparse_format_csc,
+            rocsparse_format_ell]
   graph_test: true
 
-#
-# QUICK
-#
-- name: sddmm_file
-  category: quick
-  function: sddmm
-  indextype: *i32i32_i64i32_i64i64
-  precision: *single_double_precisions
-  M: 1
-  N: 1
-  K: [4, 8]
-  alpha_beta: *alpha_beta_range_quick
-  transA: [rocsparse_operation_none]
-  transB: [rocsparse_operation_transpose]
-  baseA: [rocsparse_index_base_one]
-  matrix: [rocsparse_matrix_file_rocalution]
-  sddmm_alg: [rocsparse_sddmm_alg_default, rocsparse_sddmm_alg_dense]
-  order: [rocsparse_order_column]
-  filename: [nos1,
-             nos2]
-  formatC: [rocsparse_format_coo,rocsparse_format_coo_aos,rocsparse_format_csr,rocsparse_format_csc,rocsparse_format_ell]
-
-- name: sddmm
-  category: quick
-  function: sddmm
-  indextype: *i32i32_i64i32_i64i64
-  precision: *single_double_precisions
-  M: [12, 16, 43]
-  N: [93, 130, 220]
-  K: [3, 34, 59]
-  alpha_beta: *alpha_beta_range_quick
-  transA: [rocsparse_operation_none]
-  transB: [rocsparse_operation_none]
-  baseC: [rocsparse_index_base_zero]
-  order: [rocsparse_order_column]
-  sddmm_alg: [rocsparse_sddmm_alg_default, rocsparse_sddmm_alg_dense]
-  matrix: [rocsparse_matrix_random]
-  formatC: [rocsparse_format_coo,rocsparse_format_coo_aos,rocsparse_format_csr,rocsparse_format_csc,rocsparse_format_ell]
-
-- name: sddmm
-  category: quick
-  function: sddmm
-  indextype: *i32i32_i64i32_i64i64
-  precision: *float16_float16_float32_float32_abct_precision
-  M: [44, 88]
-  N: [103, 257]
-  K: [32, 128]
-  alpha_beta: *alpha_beta_range_quick
-  transA: [rocsparse_operation_none]
-  transB: [rocsparse_operation_none]
-  baseC: [rocsparse_index_base_zero]
-  order: [rocsparse_order_column]
-  sddmm_alg: [rocsparse_sddmm_alg_default, rocsparse_sddmm_alg_dense]
-  matrix: [rocsparse_matrix_random]
-  formatC: [rocsparse_format_coo,rocsparse_format_coo_aos,rocsparse_format_csr,rocsparse_format_csc,rocsparse_format_ell]
-
-- name: sddmm
-  category: quick
-  function: sddmm
-  indextype: *i32i32_i64i32_i64i64
-  precision: *float16_float16_float16_float16_abct_precision
-  M: [144, 188]
-  N: [203, 357]
-  K: [72, 528]
-  alpha_beta: *alpha_beta_range_quick
-  transA: [rocsparse_operation_none]
-  transB: [rocsparse_operation_none]
-  baseC: [rocsparse_index_base_zero]
-  order: [rocsparse_order_row]
-  sddmm_alg: [rocsparse_sddmm_alg_default, rocsparse_sddmm_alg_dense]
-  matrix: [rocsparse_matrix_random]
-  formatC: [rocsparse_format_coo,rocsparse_format_coo_aos,rocsparse_format_csr,rocsparse_format_csc,rocsparse_format_ell]
-
-- name: sddmm
-  category: quick
-  function: sddmm
-  indextype: *i32i32_i64i32_i64i64
-  precision: [*float16_float16_float16_float32_abct_precision, *bfloat16_bfloat16_bfloat16_float32_abct_precision]
-  M: [434, 576]
-  N: [487, 435]
-  K: [1262, 776]
-  alpha_beta: *alpha_beta_range_quick
-  transA: [rocsparse_operation_none]
-  transB: [rocsparse_operation_none]
-  baseC: [rocsparse_index_base_zero]
-  order: [rocsparse_order_column]
-  sddmm_alg: [rocsparse_sddmm_alg_default, rocsparse_sddmm_alg_dense]
-  matrix: [rocsparse_matrix_random]
-  formatC: [rocsparse_format_coo,rocsparse_format_coo_aos,rocsparse_format_csr,rocsparse_format_csc,rocsparse_format_ell]
-
-#
 # NIGHTLY
-#
 - name: sddmm
   category: nightly
   function: sddmm
-  indextype: *i32i32_i64i32_i64i64
-  precision: *single_double_precisions
+  indextype: *i32
+  precision: *single_only_precisions
   M: [1000]
   N: [1000]
   K: [40000]
-  alpha_beta: *alpha_beta_range_quick
+  alpha_beta: *alpha_beta_range_nightly
   transA: [rocsparse_operation_none]
-  baseA: [rocsparse_index_base_one]
   transB: [rocsparse_operation_none]
+  baseC: [rocsparse_index_base_one]
   order: [rocsparse_order_column]
+  orderB: [rocsparse_order_column]
   sddmm_alg: [rocsparse_sddmm_alg_default, rocsparse_sddmm_alg_dense]
   matrix: [rocsparse_matrix_random]
-  formatC: [rocsparse_format_coo,rocsparse_format_coo_aos,rocsparse_format_csr,rocsparse_format_csc,rocsparse_format_ell]
+  formatC: [rocsparse_format_coo,
+            rocsparse_format_coo_aos,
+            rocsparse_format_csr,
+            rocsparse_format_csc,
+            rocsparse_format_ell]
 
 - name: sddmm
   category: nightly
   function: sddmm
-  indextype: *i32i32_i64i32_i64i64
-  precision: *single_double_precisions
+  indextype: *i64
+  precision: *double_only_precisions
   M: [400000]
   N: [400000]
   K: [32, 64]
-  alpha_beta: *alpha_beta_range_quick
+  alpha_beta: *alpha_beta_range_nightly
   transA: [rocsparse_operation_none]
-  baseA: [rocsparse_index_base_one]
   transB: [rocsparse_operation_none]
+  baseC: [rocsparse_index_base_one]
   order: [rocsparse_order_column]
+  orderB: [rocsparse_order_column]
   sddmm_alg: [rocsparse_sddmm_alg_default]
   matrix: [rocsparse_matrix_random]
-  formatC: [rocsparse_format_coo,rocsparse_format_coo_aos,rocsparse_format_csr,rocsparse_format_csc,rocsparse_format_ell]
+  formatC: [rocsparse_format_coo,
+            rocsparse_format_coo_aos,
+            rocsparse_format_csr,
+            rocsparse_format_csc,
+            rocsparse_format_ell]
+
+- name: sddmm_file
+  category: nightly
+  function: sddmm
+  indextype: *i32
+  precision: *single_only_precisions_complex
+  M: 1
+  N: 1
+  K: [17, 18, 19, 20, 21, 22, 23, 24]
+  alpha_beta: *alpha_beta_range_nightly
+  transA: [rocsparse_operation_none]
+  transB: [rocsparse_operation_transpose]
+  baseC: [rocsparse_index_base_one]
+  order: [rocsparse_order_column]
+  orderB: [rocsparse_order_column]
+  matrix: [rocsparse_matrix_file_rocalution]
+  sddmm_alg: [rocsparse_sddmm_alg_default]
+  filename: [mplate]
+  formatC: [rocsparse_format_coo,
+            rocsparse_format_coo_aos,
+            rocsparse_format_csr,
+            rocsparse_format_csc,
+            rocsparse_format_ell]
+
+- name: sddmm_file
+  category: nightly
+  function: sddmm
+  indextype: *i64i32
+  precision: *double_only_precisions_complex
+  M: 1
+  N: 1
+  K: [25]
+  alpha_beta: *alpha_beta_range_nightly
+  transA: [rocsparse_operation_none]
+  transB: [rocsparse_operation_conjugate_transpose]
+  baseC: [rocsparse_index_base_one]
+  order: [rocsparse_order_column]
+  orderB: [rocsparse_order_column]
+  matrix: [rocsparse_matrix_file_rocalution]
+  sddmm_alg: [rocsparse_sddmm_alg_default]
+  filename: [Chevron2]
+  formatC: [rocsparse_format_coo,
+            rocsparse_format_coo_aos,
+            rocsparse_format_csr,
+            rocsparse_format_csc,
+            rocsparse_format_ell]
