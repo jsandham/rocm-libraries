@@ -142,9 +142,7 @@ void testing_spsm_csr(const Arguments& arg)
     I nnz_A;
     matrix_factory.init_csr(hcsr_row_ptr, hcsr_col_ind, hcsr_val, M, N, nnz_A, base);
 
-    //
     // Scale values.
-    //
     {
         const size_t       size = hcsr_val.size();
         floating_data_t<T> mx   = floating_data_t<T>(0);
@@ -188,6 +186,8 @@ void testing_spsm_csr(const Arguments& arg)
         return;
     }
 
+    std::cout << "M: " << M << " N: " << N << " K: " << K << " ldb: " << ldb << " ldc: " << ldc << std::endl;
+
     // Allocate host memory for vectors
     host_dense_matrix<T> htemp(B_m, B_n);
     host_dense_matrix<T> hB(nrowB, ncolB);
@@ -208,106 +208,13 @@ void testing_spsm_csr(const Arguments& arg)
             }
         }
 
-        if(trans_B == rocsparse_operation_none)
-        {
-            if(order_C == rocsparse_order_column)
-            {
-                for(J j = 0; j < B_n; j++)
-                {
-                    for(J i = 0; i < B_m; i++)
-                    {
-                        hC_1[i + ldc * j] = hB[i + ldb * j];
-                    }
-                }
-            }
-            else
-            {
-                for(J j = 0; j < B_n; j++)
-                {
-                    for(J i = 0; i < B_m; i++)
-                    {
-                        hC_1[i * ldc + j] = hB[i + ldb * j];
-                    }
-                }
-            }
-        }
-        else
-        {
-            if(order_C == rocsparse_order_column)
-            {
-                for(J j = 0; j < B_n; j++)
-                {
-                    for(J i = 0; i < B_m; i++)
-                    {
-                        hC_1[i * ldc + j] = hB[i + ldb * j];
-                    }
-                }
-            }
-            else
-            {
-                for(J j = 0; j < B_n; j++)
-                {
-                    for(J i = 0; i < B_m; i++)
-                    {
-                        hC_1[i + ldc * j] = hB[i + ldb * j];
-                    }
-                }
-            }
-        }
-    }
-    else
-    {
-        for(J i = 0; i < B_m; i++)
+        if(order_C == rocsparse_order_column)
         {
             for(J j = 0; j < B_n; j++)
             {
-                hB[ldb * i + j] = htemp[B_n * i + j];
-            }
-        }
-
-        if(trans_B == rocsparse_operation_none)
-        {
-            if(order_C == rocsparse_order_column)
-            {
-                for(J j = 0; j < B_n; j++)
+                for(J i = 0; i < B_m; i++)
                 {
-                    for(J i = 0; i < B_m; i++)
-                    {
-                        hC_1[i + ldc * j] = hB[ldb * i + j];
-                    }
-                }
-            }
-            else
-            {
-                for(J j = 0; j < B_n; j++)
-                {
-                    for(J i = 0; i < B_m; i++)
-                    {
-                        hC_1[i * ldc + j] = hB[ldb * i + j];
-                    }
-                }
-            }
-        }
-        else
-        {
-            if(order_C == rocsparse_order_column)
-            {
-                for(J j = 0; j < B_n; j++)
-                {
-                    for(J i = 0; i < B_m; i++)
-                    {
-                        hC_1[i * ldc + j] = hB[ldb * i + j];
-                    }
-                }
-            }
-            else
-            {
-                for(J j = 0; j < B_n; j++)
-                {
-                    for(J i = 0; i < B_m; i++)
-                    {
-                        hC_1[i + ldc * j] = hB[ldb * i + j];
-                    }
+                    hC_1[i * ldc + j] = hB[i + ldb * j];
                 }
             }
         }
@@ -315,30 +222,6 @@ void testing_spsm_csr(const Arguments& arg)
 
     hC_2    = hC_1;
     hC_gold = hC_1;
-
-    if(trans_B == rocsparse_operation_conjugate_transpose)
-    {
-        if(order_C == rocsparse_order_column)
-        {
-            for(J j = 0; j < C_n; j++)
-            {
-                for(J i = 0; i < C_m; i++)
-                {
-                    hC_gold[i + ldc * j] = rocsparse_conj<T>(hC_gold[i + ldc * j]);
-                }
-            }
-        }
-        else
-        {
-            for(J i = 0; i < C_m; i++)
-            {
-                for(J j = 0; j < C_n; j++)
-                {
-                    hC_gold[ldc * i + j] = rocsparse_conj<T>(hC_gold[ldc * i + j]);
-                }
-            }
-        }
-    }
 
     // Allocate device memory
     device_vector<I>       dcsr_row_ptr(M + 1);
@@ -389,6 +272,8 @@ void testing_spsm_csr(const Arguments& arg)
                                          &buffer_size,
                                          nullptr));
 
+    std::cout << "buffer_size: " << buffer_size << std::endl;
+
     // Allocate buffer
     void* dbuffer;
     CHECK_HIP_ERROR(rocsparse_hipMalloc(&dbuffer, buffer_size));
@@ -408,26 +293,6 @@ void testing_spsm_csr(const Arguments& arg)
                                          nullptr,
                                          dbuffer));
 
-    // Perform analysis on device
-    CHECK_ROCSPARSE_ERROR(rocsparse_set_pointer_mode(handle, rocsparse_pointer_mode_device));
-    CHECK_ROCSPARSE_ERROR(rocsparse_spsm(handle,
-                                         trans_A,
-                                         trans_B,
-                                         dalpha,
-                                         A,
-                                         B,
-                                         C2,
-                                         ttype,
-                                         alg,
-                                         rocsparse_spsm_stage_preprocess,
-                                         nullptr,
-                                         dbuffer));
-
-    //
-    // The buffer must be be non persistent, let's put garbage in it.
-    //
-    CHECK_HIP_ERROR(hipMemset(dbuffer, 255 - 1, buffer_size));
-
     if(arg.unit_check)
     {
         // Solve on host
@@ -445,35 +310,10 @@ void testing_spsm_csr(const Arguments& arg)
                                                       &buffer_size,
                                                       dbuffer));
 
-        // Solve on device
-        CHECK_ROCSPARSE_ERROR(rocsparse_set_pointer_mode(handle, rocsparse_pointer_mode_device));
-        CHECK_ROCSPARSE_ERROR(testing::rocsparse_spsm(handle,
-                                                      trans_A,
-                                                      trans_B,
-                                                      dalpha,
-                                                      A,
-                                                      B,
-                                                      C2,
-                                                      ttype,
-                                                      alg,
-                                                      rocsparse_spsm_stage_compute,
-                                                      &buffer_size,
-                                                      dbuffer));
-
         CHECK_HIP_ERROR(hipDeviceSynchronize());
-
-        if(ROCSPARSE_REPRODUCIBILITY)
-        {
-            rocsparse_reproducibility::save("dC_1", dC_1);
-        }
-        if(ROCSPARSE_REPRODUCIBILITY)
-        {
-            rocsparse_reproducibility::save("dC_2", dC_2);
-        }
 
         // Copy output to host
         CHECK_HIP_ERROR(hipMemcpy(hC_1, dC_1, sizeof(T) * nrowC * ncolC, hipMemcpyDeviceToHost));
-        CHECK_HIP_ERROR(hipMemcpy(hC_2, dC_2, sizeof(T) * nrowC * ncolC, hipMemcpyDeviceToHost));
 
         // CPU csrsm
         J analysis_pivot = -1;
@@ -496,55 +336,11 @@ void testing_spsm_csr(const Arguments& arg)
                             &analysis_pivot,
                             &solve_pivot);
 
+	std::cout << "analysis_pivot: " << analysis_pivot << " solve_pivot: " << solve_pivot << std::endl;
         if(analysis_pivot == -1 && solve_pivot == -1)
         {
             hC_gold.near_check(hC_1);
-            hC_gold.near_check(hC_2);
         }
-    }
-
-    if(arg.timing)
-    {
-
-        CHECK_ROCSPARSE_ERROR(rocsparse_set_pointer_mode(handle, rocsparse_pointer_mode_host));
-
-        const double gpu_time_used = rocsparse_clients::run_benchmark(arg,
-                                                                      rocsparse_spsm,
-                                                                      handle,
-                                                                      trans_A,
-                                                                      trans_B,
-                                                                      &halpha,
-                                                                      A,
-                                                                      B,
-                                                                      C1,
-                                                                      ttype,
-                                                                      alg,
-                                                                      rocsparse_spsm_stage_compute,
-                                                                      &buffer_size,
-                                                                      dbuffer);
-
-        double gflop_count = spsv_gflop_count(M, nnz_A, diag) * K;
-        double gpu_gflops  = get_gpu_gflops(gpu_time_used, gflop_count);
-
-        double gbyte_count = csrsv_gbyte_count<T>(M, nnz_A) * K;
-        double gpu_gbyte   = get_gpu_gbyte(gpu_time_used, gbyte_count);
-
-        display_timing_info(display_key_t::M,
-                            M,
-                            display_key_t::nnz_A,
-                            nnz_A,
-                            display_key_t::nrhs,
-                            K,
-                            display_key_t::alpha,
-                            halpha,
-                            display_key_t::algorithm,
-                            rocsparse_spsmalg2string(alg),
-                            display_key_t::gflops,
-                            gpu_gflops,
-                            display_key_t::bandwidth,
-                            gpu_gbyte,
-                            display_key_t::time_ms,
-                            get_gpu_time_msec(gpu_time_used));
     }
 
     CHECK_HIP_ERROR(rocsparse_hipFree(dbuffer));

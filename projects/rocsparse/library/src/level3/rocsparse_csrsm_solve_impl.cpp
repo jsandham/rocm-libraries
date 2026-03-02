@@ -94,6 +94,7 @@ namespace rocsparse
                                                  rocsparse_csrsm_info      csrsm_info,
                                                  void*                     temp_buffer)
     {
+	std::cout << "csrsm_solve_dispatch" << std::endl;
         ROCSPARSE_ROUTINE_TRACE;
 
         // Stream
