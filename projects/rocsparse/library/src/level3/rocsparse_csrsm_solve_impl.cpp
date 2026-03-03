@@ -175,6 +175,7 @@ namespace rocsparse
         if(trans_A == rocsparse_operation_transpose
            || trans_A == rocsparse_operation_conjugate_transpose)
         {
+	    std::cout << "1111" << std::endl;
             T* csrt_val = At;
 
             // Gather values
@@ -212,7 +213,7 @@ namespace rocsparse
 
             if(blockdim == 64)
             {
-
+		std::cout << "blockdim: " << blockdim << std::endl;
                 if(gcn_arch_name == rocpsarse_arch_names::gfx908 && asicRev < 2)
                 {
                     RETURN_IF_HIPLAUNCHKERNELGGL_ERROR(
@@ -240,6 +241,8 @@ namespace rocsparse
                 }
                 else
                 {
+		    std::cout << "2222" << std::endl;
+		    std::cout << "m: " << m << " nrhs: " << nrhs << " fill_mode: " << fill_mode << std::endl;
                     RETURN_IF_HIPLAUNCHKERNELGGL_ERROR(
                         (rocsparse::csrsm<64, 64, false>),
                         csrsm_blocks,
@@ -524,6 +527,8 @@ rocsparse_status rocsparse::csrsm_solve_core(rocsparse_handle          handle,
                                              rocsparse_csrsm_info      csrsm_info,
                                              void*                     temp_buffer)
 {
+    std::cout << "csrsm_solve_core" << std::endl;
+
     ROCSPARSE_ROUTINE_TRACE;
 
     const J  m           = static_cast<J>(m_);

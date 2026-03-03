@@ -70,7 +70,7 @@ Tests:
   precision: *single_only_precisions
   M: 1
   N: 1
-  K: [2]
+  K: [2, 3, 4, 5, 6, 7, 8, 9]
   ld_multiplier_B: [1]
   ld_multiplier_C: [1]
   alpha_alphai: *alpha_range_nightly_one

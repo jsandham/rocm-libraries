@@ -680,6 +680,7 @@ namespace rocsparse
                           size_t*                     buffer_size,
                           void*                       temp_buffer)
     {
+	std::cout << "rocsparse_spsm" << std::endl;
         ROCSPARSE_ROUTINE_TRACE;
         const rocsparse_datatype alpha_datatype = matA->data_type;
 
@@ -871,6 +872,7 @@ namespace rocsparse
 
         case rocsparse_spsm_stage_compute:
         {
+	    std::cout << "rocsparse_spsm rocsparse_spsm_stage_compute" << std::endl;
             switch(spsm_case)
             {
             case rocsparse::spsm_case::T_T:
