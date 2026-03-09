@@ -450,6 +450,26 @@ rocsparse_status rocsparse::gtrm_analysis(rocsparse_handle          handle,
     }
 
     apply_sort2(handle, m, done_array, workspace2, workspace, row_map, rocprim_buffer);
+
+    std::vector<int> hdone_array(m);
+    RETURN_IF_HIP_ERROR(hipMemcpy(hdone_array.data(), done_array, sizeof(int) * m, hipMemcpyDeviceToHost));
+
+    std::cout << "hdone_array" << std::endl;
+    for(size_t i = 0; i < hdone_array.size(); i++)
+    {
+        std::cout << hdone_array[i] << " ";
+    }
+    std::cout << "" << std::endl;
+
+    std::vector<int> hrow_map(m);
+    RETURN_IF_HIP_ERROR(hipMemcpy(hrow_map.data(), row_map, sizeof(int) * m, hipMemcpyDeviceToHost));
+
+    std::cout << "hrow_map" << std::endl;
+    for(size_t i = 0; i < hrow_map.size(); i++)
+    {
+        std::cout << hrow_map[i] << " ";
+    }
+    std::cout << "" << std::endl;
     return rocsparse_status_success;
 }
 

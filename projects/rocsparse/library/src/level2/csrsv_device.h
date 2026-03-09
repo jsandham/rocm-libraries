@@ -305,7 +305,7 @@ namespace rocsparse
         const J idx = hipBlockIdx_x * (BLOCKSIZE / WF_SIZE) + wid;
 
         // Shared memory to hold diagonal entry
-        __shared__ T diagonal[BLOCKSIZE / WF_SIZE];
+        //__shared__ T diagonal[BLOCKSIZE / WF_SIZE];
 
         // Do not run out of bounds
         if(idx >= m)
@@ -338,14 +338,14 @@ namespace rocsparse
             T local_val = rocsparse::nontemporal_load(csr_val + j * csr_val_inc);
 
             // Check for numerical zero
-            if(local_val == static_cast<T>(0) && local_col == row
-               && diag_type == rocsparse_diag_type_non_unit)
-            {
-                // Numerical zero pivot found, avoid division by 0
-                // and store index for later use.
-                rocsparse::atomic_min(zero_pivot, row + idx_base);
-                local_val = static_cast<T>(1);
-            }
+            //if(local_val == static_cast<T>(0) && local_col == row
+            //   && diag_type == rocsparse_diag_type_non_unit)
+            //{
+            //    // Numerical zero pivot found, avoid division by 0
+            //    // and store index for later use.
+            //    rocsparse::atomic_min(zero_pivot, row + idx_base);
+            //    local_val = static_cast<T>(1);
+            //}
 
             // Differentiate upper and lower triangular mode
             if(fill_mode == rocsparse_fill_mode_upper)
@@ -363,10 +363,10 @@ namespace rocsparse
                 {
                     // If diagonal type is non unit, do division by diagonal entry
                     // This is not required for unit diagonal for obvious reasons
-                    if(diag_type == rocsparse_diag_type_non_unit)
-                    {
-                        diagonal[wid] = static_cast<T>(1) / local_val;
-                    }
+                    //if(diag_type == rocsparse_diag_type_non_unit)
+                    //{
+                    //    diagonal[wid] = static_cast<T>(1) / local_val;
+                    //}
 
                     continue;
                 }
@@ -386,10 +386,10 @@ namespace rocsparse
                 {
                     // If diagonal type is non unit, do division by diagonal entry
                     // This is not required for unit diagonal for obvious reasons
-                    if(diag_type == rocsparse_diag_type_non_unit)
-                    {
-                        diagonal[wid] = static_cast<T>(1) / local_val;
-                    }
+                    //if(diag_type == rocsparse_diag_type_non_unit)
+                    //{
+                    //    diagonal[wid] = static_cast<T>(1) / local_val;
+                    //}
 
                     break;
                 }
@@ -408,12 +408,14 @@ namespace rocsparse
 
         // If we have non unit diagonal, take the diagonal into account
         // For unit diagonal, this would be multiplication with one
-        if(diag_type == rocsparse_diag_type_non_unit)
-        {
-            __threadfence_block();
-
-            local_sum = local_sum * diagonal[wid];
-        }
+        //if(diag_type == rocsparse_diag_type_non_unit)
+        //{
+        //    __threadfence_block();
+	//
+        //    local_sum = local_sum * diagonal[wid];
+        //}
+	//
+	__threadfence();
 
         if(lid == WF_SIZE - 1)
         {

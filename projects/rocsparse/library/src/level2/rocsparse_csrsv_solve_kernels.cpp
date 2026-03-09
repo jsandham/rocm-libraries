@@ -116,6 +116,7 @@ namespace rocsparse
                                                 rocsparse_diag_type  diag_type,
                                                 bool                 is_host_mode)
     {
+	std::cout << "fill_mode: " << fill_mode << " diag_type: " << diag_type << std::endl;
         auto alpha = reinterpret_cast<const T*>(alpha_);
         dim3 csrsv_blocks((m * handle->wavefront_size - 1) / BLOCKSIZE + 1, batch_count);
         dim3 csrsv_threads(BLOCKSIZE);
@@ -166,6 +167,7 @@ namespace rocsparse
                                                 void* __restrict__ zero_pivot,
                                                 bool is_host_mode)
     {
+	std::cout << "A->descr->fill_mode: " << A->descr->fill_mode << " A->descr->diag_type: " << A->descr->diag_type << std::endl;
         auto          alpha = reinterpret_cast<const T*>(alpha_);
         dim3          csrsv_blocks((m * handle->wavefront_size - 1) / BLOCKSIZE + 1, batch_count);
         dim3          csrsv_threads(BLOCKSIZE);
