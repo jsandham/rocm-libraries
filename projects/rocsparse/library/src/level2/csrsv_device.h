@@ -327,15 +327,18 @@ namespace rocsparse
         {
             // Lane 0 initializes its local sum with alpha and x
             local_sum = alpha * rocsparse::nontemporal_load(x + x_inc * row);
+	    //local_sum = alpha * x[x_inc * row];
         }
 
         for(I j = row_begin + lid; j < row_end; j += WF_SIZE)
         {
             // Current column this lane operates on
             const J local_col = rocsparse::nontemporal_load(csr_col_ind + j) - idx_base;
+	    //const J local_col = csr_col_ind[j] - idx_base;
 
             // Local value this lane operates with
             T local_val = rocsparse::nontemporal_load(csr_val + j * csr_val_inc);
+	    //T local_val = csr_val[j * csr_val_inc];
 
             // Check for numerical zero
             //if(local_val == static_cast<T>(0) && local_col == row
@@ -347,7 +350,7 @@ namespace rocsparse
             //    local_val = static_cast<T>(1);
             //}
 
-            // Differentiate upper and lower triangular mode
+            /*// Differentiate upper and lower triangular mode
             if(fill_mode == rocsparse_fill_mode_upper)
             {
                 // Processing upper triangular
@@ -393,7 +396,12 @@ namespace rocsparse
 
                     break;
                 }
-            }
+            }*/
+
+	    if(local_col >= row)
+	    {
+		break;
+	    }
 
             // Spin loop until dependency has been resolved
             (void)rocsparse::spin_loop<SLEEP>(&done_array[local_col], __HIP_MEMORY_SCOPE_AGENT);
@@ -415,12 +423,13 @@ namespace rocsparse
         //    local_sum = local_sum * diagonal[wid];
         //}
 	//
-	__threadfence();
 
         if(lid == WF_SIZE - 1)
         {
             // Store the rows result in y
             rocsparse::nontemporal_store(local_sum, &y[row * y_inc]);
+	    //y[row * y_inc] = local_sum;
+	    //__builtin_amdgcn_fence(__ATOMIC_RELEASE, "agent");
 
             // Mark row as done
             __hip_atomic_store(&done_array[row], 1, __ATOMIC_RELEASE, __HIP_MEMORY_SCOPE_AGENT);
