@@ -1,0 +1,13 @@
+# ########################################################################
+# Copyright (C) 2022-2026 Advanced Micro Devices, Inc. All rights Reserved.
+#
+# Minimal spmm_batched_coo test - no parameterized cases. The actual test
+# is a plain TEST() in test_spmm_batched_coo_minimal.cpp that bypasses
+# RocSPARSE_TestData. This yaml exists only to satisfy the build dependency.
+#
+# ########################################################################
+
+---
+include: rocsparse_common.yaml
+
+Tests: []

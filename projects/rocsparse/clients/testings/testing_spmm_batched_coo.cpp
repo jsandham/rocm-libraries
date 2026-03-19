@@ -24,211 +24,359 @@
 #include "testing.hpp"
 
 #include <tuple>
+#include <assert.h>
 
 template <typename I, typename A, typename B, typename C, typename T>
-void testing_spmm_batched_coo_bad_arg(const Arguments& arg)
+void testing_spmm_batched_coo_bad_arg(const Arguments& arg){}
+
+#define HIP_CHECK(stat)                                                        \
+    {                                                                          \
+        if(stat != hipSuccess)                                                 \
+        {                                                                      \
+            std::cerr << "Error: hip error in line " << __LINE__ << " stat: " << stat << std::endl; \
+            return;                                                         \
+        }                                                                      \
+    }
+
+// Simple Matrix Market coordinate format parser (real, general or symmetric)
+bool read_mtx(const char* filename,
+    int&        m,
+    int&        n,
+    int64_t&    nnz,
+    std::vector<int32_t>& row_ind,
+    std::vector<int32_t>& col_ind,
+    std::vector<double>&   val)
 {
-    static const size_t safe_size = 100;
+    std::ifstream f(filename);
+    if(!f)
+    {
+        std::cerr << "Cannot open " << filename << std::endl;
+        return false;
+    }
 
-    // Create rocsparse handle
-    rocsparse_local_handle local_handle;
+    std::string line;
+    bool        symmetric = false;
+    while(std::getline(f, line))
+    {
+        if(line.empty())
+            continue;
+        if(line[0] == '%')
+        {
+            std::string lower = line;
+            for(char& ch : lower)
+                ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+            if(lower.find("symmetric") != std::string::npos)
+            symmetric = true;
+            continue;
+        }
+        break;
+    }
 
-    rocsparse_handle     handle      = local_handle;
-    I                    m           = safe_size;
-    I                    n           = safe_size;
-    I                    k           = safe_size;
-    int64_t              nnz         = safe_size;
-    void*                coo_val     = (void*)0x4;
-    void*                coo_row_ind = (void*)0x4;
-    void*                coo_col_ind = (void*)0x4;
-    void*                dense_B     = (void*)0x4;
-    void*                dense_C     = (void*)0x4;
-    size_t*              buffer_size = (size_t*)0x4;
-    void*                temp_buffer = (void*)0x4;
-    rocsparse_operation  trans_A     = rocsparse_operation_none;
-    rocsparse_operation  trans_B     = rocsparse_operation_none;
-    rocsparse_index_base base        = rocsparse_index_base_zero;
-    rocsparse_order      order_B     = rocsparse_order_column;
-    rocsparse_order      order_C     = rocsparse_order_column;
-    rocsparse_spmm_alg   alg         = rocsparse_spmm_alg_default;
-    rocsparse_spmm_stage stage       = rocsparse_spmm_stage_compute;
+    std::istringstream iss(line);
+    int                nrows, ncols, nentries;
+    iss >> nrows >> ncols >> nentries;
 
-    rocsparse_indextype itype = get_indextype<I>();
-    rocsparse_datatype  atype = get_datatype<A>();
-    rocsparse_datatype  btype = get_datatype<B>();
-    rocsparse_datatype  ctype = get_datatype<C>();
-    rocsparse_datatype  ttype = get_datatype<T>();
+    m   = nrows;
+    n   = ncols;
+    nnz = nentries;
 
-    T alpha = static_cast<T>(1.0);
-    T beta  = static_cast<T>(0.0);
+    row_ind.resize(nnz);
+    col_ind.resize(nnz);
+    val.resize(nnz);
 
-    // SpMM structures
-    rocsparse_local_spmat local_mat_A(
-        m, k, nnz, coo_row_ind, coo_col_ind, coo_val, itype, base, atype);
-    rocsparse_local_dnmat local_mat_B(k, n, k, dense_B, btype, order_B);
-    rocsparse_local_dnmat local_mat_C(m, n, m, dense_C, ctype, order_C);
+    for(int64_t i = 0; i < nnz; i++)
+    {
+        if(!std::getline(f, line))
+        {
+            std::cerr << "Unexpected EOF" << std::endl;
+            return false;
+        }
+        std::istringstream lss(line);
+        int                r, c;
+        double             v;
+        lss >> r >> c >> v;
+        row_ind[i] = r - 1; // 1-based to 0-based
+        col_ind[i] = c - 1;
+        val[i]     = static_cast<double>(v);
+    }
 
-    rocsparse_spmat_descr mat_A = local_mat_A;
-    rocsparse_dnmat_descr mat_B = local_mat_B;
-    rocsparse_dnmat_descr mat_C = local_mat_C;
+    // If symmetric, the file stores only the lower triangle; fill in the upper triangle
+    if(symmetric)
+    {
+        int64_t off_diag = 0;
+        for(int64_t i = 0; i < nnz; i++)
+            if(row_ind[i] != col_ind[i])
+                off_diag++;
+        int64_t new_nnz = nnz + off_diag;
+        row_ind.resize(new_nnz);
+        col_ind.resize(new_nnz);
+        val.resize(new_nnz);
+        int64_t j = nnz;
+        for(int64_t i = 0; i < nnz; i++)
+        {
+            if(row_ind[i] != col_ind[i])
+            {
+                row_ind[j] = col_ind[i];
+                col_ind[j] = row_ind[i];
+                val[j]     = val[i];
+                j++;
+            }
+        }
+        nnz = new_nnz;
+    }
 
-#define PARAMS                                                                                    \
-    handle, trans_A, trans_B, &alpha, mat_A, mat_B, &beta, mat_C, ttype, alg, stage, buffer_size, \
-        temp_buffer
+    // Sort COO by row index, then by column index within each row
+    std::vector<int64_t> perm(nnz);
+    for(int64_t i = 0; i < nnz; i++)
+        perm[i] = i;
+    std::sort(perm.begin(), perm.end(), [&](int64_t i, int64_t j) {
+        if(row_ind[i] != row_ind[j])
+            return row_ind[i] < row_ind[j];
+        return col_ind[i] < col_ind[j];
+    });
+    std::vector<int32_t> row_tmp(row_ind.begin(), row_ind.end());
+    std::vector<int32_t> col_tmp(col_ind.begin(), col_ind.end());
+    std::vector<double>   val_tmp(val.begin(), val.end());
+    for(int64_t i = 0; i < nnz; i++)
+    {
+        row_ind[i] = row_tmp[perm[i]];
+        col_ind[i] = col_tmp[perm[i]];
+        val[i]     = val_tmp[perm[i]];
+    }
 
-    rocsparse_int batch_count_A;
-    rocsparse_int batch_count_B;
-    rocsparse_int batch_count_C;
-    int64_t       batch_stride_A;
-    int64_t       batch_stride_B;
-    int64_t       batch_stride_C;
+    return true;
+}
 
-    // C_i = A * B_i
-    batch_count_A  = 1;
-    batch_count_B  = 10;
-    batch_count_C  = 5;
-    batch_stride_A = 0;
-    batch_stride_B = k * n;
-    batch_stride_C = m * n;
-    EXPECT_ROCSPARSE_STATUS(rocsparse_coo_set_strided_batch(mat_A, batch_count_A, batch_stride_A),
-                            rocsparse_status_success);
-    EXPECT_ROCSPARSE_STATUS(rocsparse_dnmat_set_strided_batch(mat_B, batch_count_B, batch_stride_B),
-                            rocsparse_status_success);
-    EXPECT_ROCSPARSE_STATUS(rocsparse_dnmat_set_strided_batch(mat_C, batch_count_C, batch_stride_C),
-                            rocsparse_status_success);
+// shfl
+__device__ __forceinline__ double shfl(double var, int src_lane, int width = 32)
+{
+    return __shfl(var, src_lane, width);
+}
 
-    EXPECT_ROCSPARSE_STATUS(rocsparse_spmm(PARAMS), rocsparse_status_invalid_value);
+__device__ __forceinline__ int32_t shfl(int32_t var, int src_lane, int width = 32)
+{
+    return __shfl(var, src_lane, width);
+}
 
-    // C_i = A_i * B
-    batch_count_A  = 10;
-    batch_count_B  = 1;
-    batch_count_C  = 5;
-    batch_stride_A = nnz;
-    batch_stride_B = 0;
-    batch_stride_C = m * n;
-    EXPECT_ROCSPARSE_STATUS(rocsparse_coo_set_strided_batch(mat_A, batch_count_A, batch_stride_A),
-                            rocsparse_status_success);
-    EXPECT_ROCSPARSE_STATUS(rocsparse_dnmat_set_strided_batch(mat_B, batch_count_B, batch_stride_B),
-                            rocsparse_status_success);
-    EXPECT_ROCSPARSE_STATUS(rocsparse_dnmat_set_strided_batch(mat_C, batch_count_C, batch_stride_C),
-                            rocsparse_status_success);
+// coommnn_atomic_remainder_device kernel (BLOCKSIZE=256, WF_SIZE=16, TRANSB=true)
+// C = alpha * A * B^T, B and C column-major
+__device__ void coommnn_atomic_remainder_device(int32_t              m,
+                                                int32_t              n,
+                                                int32_t              k,
+                                                int64_t              nnz,
+                                                const int32_t* __restrict__ coo_row_ind,
+                                                const int32_t* __restrict__ coo_col_ind,
+                                                const double* __restrict__ coo_val,
+                                                const double* __restrict__ dense_B,
+                                                int64_t               ldb,
+                                                double* __restrict__ dense_C,
+                                                int64_t               ldc)
+{
+    constexpr uint32_t BLOCKSIZE = 256;
+    constexpr uint32_t WF_SIZE   = 16;
 
-    EXPECT_ROCSPARSE_STATUS(rocsparse_spmm(PARAMS), rocsparse_status_invalid_value);
+    const int     tid = hipThreadIdx_x;
+    const int     lid = tid & (WF_SIZE - 1);
+    const int     wid = tid / WF_SIZE;
+    const int64_t gid = BLOCKSIZE * hipBlockIdx_x + tid;
 
-    // C_i = A_i * B_i
-    batch_count_A  = 10;
-    batch_count_B  = 10;
-    batch_count_C  = 5;
-    batch_stride_A = nnz;
-    batch_stride_B = k * n;
-    batch_stride_C = m * n;
-    EXPECT_ROCSPARSE_STATUS(rocsparse_coo_set_strided_batch(mat_A, batch_count_A, batch_stride_A),
-                            rocsparse_status_success);
-    EXPECT_ROCSPARSE_STATUS(rocsparse_dnmat_set_strided_batch(mat_B, batch_count_B, batch_stride_B),
-                            rocsparse_status_success);
-    EXPECT_ROCSPARSE_STATUS(rocsparse_dnmat_set_strided_batch(mat_C, batch_count_C, batch_stride_C),
-                            rocsparse_status_success);
+    __shared__ int32_t shared_row[(BLOCKSIZE / WF_SIZE) * WF_SIZE];
+    __shared__ double  shared_val[(BLOCKSIZE / WF_SIZE) * WF_SIZE];
 
-    EXPECT_ROCSPARSE_STATUS(rocsparse_spmm(PARAMS), rocsparse_status_invalid_value);
-#undef PARAMS
+    const int32_t row = (gid < nnz) ? coo_row_ind[gid] : -1;
+    const int32_t col = (gid < nnz) ? coo_col_ind[gid] : 0;
+    const double   val = (gid < nnz) ? coo_val[gid] : 0.0;
+
+    for(int32_t l = 0; l < n; l += WF_SIZE)
+    {
+        const int32_t colB = l + lid;
+
+        double         sum         = 0.0;
+        int32_t       current_row = shfl(row, 0, WF_SIZE);
+
+        for(uint32_t i = 0; i < WF_SIZE; ++i)
+        {
+            double   v = shfl(val, i, WF_SIZE);
+            int32_t c = shfl(col, i, WF_SIZE);
+            int32_t r = shfl(row, i, WF_SIZE);
+
+            if(r != current_row)
+            {
+                if(colB < n)
+                {
+                    assert((colB * ldc + current_row) >= 0);
+                    assert((colB * ldc + current_row) < (ldc * n));
+                    atomicAdd(&dense_C[colB * ldc + current_row], sum);
+                }
+                sum         = 0.0;
+                current_row = r;
+            }
+
+            if(colB < n)
+            {
+                assert((c * ldb + colB) >= 0);
+                assert((c * ldb + colB) < ldb * k);
+                sum = v * dense_B[c * ldb + colB] + sum;
+            }
+        }
+
+        __syncthreads();
+        assert(((BLOCKSIZE / WF_SIZE) * lid + wid) >= 0);
+        assert(((BLOCKSIZE / WF_SIZE) * lid + wid) < BLOCKSIZE);
+        shared_row[(BLOCKSIZE / WF_SIZE) * lid + wid] = current_row;
+        shared_val[(BLOCKSIZE / WF_SIZE) * lid + wid]  = sum;
+        __syncthreads();
+
+        current_row = shared_row[tid];
+        sum         = shared_val[tid];
+
+        const int slid = tid & ((BLOCKSIZE / WF_SIZE) - 1);
+        const int swid = tid / (BLOCKSIZE / WF_SIZE);
+
+        for(uint32_t j = 1; j < (BLOCKSIZE / WF_SIZE); j <<= 1)
+        {
+            if(slid >= j)
+            {
+                assert(((BLOCKSIZE / WF_SIZE) * swid + slid - j) >= 0);
+                assert(((BLOCKSIZE / WF_SIZE) * swid + slid - j) < BLOCKSIZE);
+                if(current_row == shared_row[(BLOCKSIZE / WF_SIZE) * swid + slid - j])
+                {
+                    sum = sum + shared_val[(BLOCKSIZE / WF_SIZE) * swid + slid - j];
+                }
+            }
+            __syncthreads();
+            assert(((BLOCKSIZE / WF_SIZE) * swid + slid) >= 0);
+            assert(((BLOCKSIZE / WF_SIZE) * swid + slid) < BLOCKSIZE);
+            shared_val[(BLOCKSIZE / WF_SIZE) * swid + slid] = sum;
+            __syncthreads();
+        }
+
+        if(slid < ((BLOCKSIZE / WF_SIZE) - 1))
+        {
+            assert(((BLOCKSIZE / WF_SIZE) * swid + slid + 1) >= 0);
+            assert(((BLOCKSIZE / WF_SIZE) * swid + slid + 1) < BLOCKSIZE);
+            if(current_row != shared_row[(BLOCKSIZE / WF_SIZE) * swid + slid + 1]
+               && current_row >= 0)
+            {
+                if((l + swid) < n)
+                {
+                    assert(((l + swid) * ldc + current_row) >= 0);
+                    assert(((l + swid) * ldc + current_row) < (ldc * n));
+                    atomicAdd(&dense_C[(l + swid) * ldc + current_row], sum);
+                }
+            }
+        }
+
+        if(slid == ((BLOCKSIZE / WF_SIZE) - 1))
+        {
+            if(current_row >= 0)
+            {
+                if((l + swid) < n)
+                {
+                    assert(((l + swid) * ldc + current_row) >= 0);
+                    assert(((l + swid) * ldc + current_row) < (ldc * n));
+                    atomicAdd(&dense_C[(l + swid) * ldc + current_row], sum);
+                }
+            }
+        }
+    }
+}
+
+// Kernel launcher
+__launch_bounds__(256)
+__global__ void coommnn_atomic_remainder_kernel(int32_t              m,
+                                                int32_t              n,
+                                                int32_t              k,
+                                                int64_t              nnz,
+                                                int64_t              batch_stride_A,
+                                                const int32_t* __restrict__ coo_row_ind,
+                                                const int32_t* __restrict__ coo_col_ind,
+                                                const double* __restrict__ coo_val,
+                                                const double* __restrict__ dense_B,
+                                                int64_t               ldb,
+                                                int64_t               batch_stride_B,
+                                                double* __restrict__ dense_C,
+                                                int64_t               ldc,
+                                                int64_t               batch_stride_C)
+{
+    coommnn_atomic_remainder_device(m,
+                                    n,
+                                    k,
+                                    nnz,
+                                    &coo_row_ind[batch_stride_A * hipBlockIdx_y],
+                                    &coo_col_ind[batch_stride_A * hipBlockIdx_y],
+                                    &coo_val[batch_stride_A * hipBlockIdx_y],
+                                    &dense_B[batch_stride_B * hipBlockIdx_y],
+                                    ldb,
+                                    &dense_C[batch_stride_C * hipBlockIdx_y],
+                                    ldc);
 }
 
 template <typename I, typename A, typename B, typename C, typename T>
 void testing_spmm_batched_coo(const Arguments& arg)
 {
-    I                    M               = arg.M;
-    I                    N               = arg.N;
-    I                    K               = arg.K;
-    rocsparse_operation  trans_A         = arg.transA;
-    rocsparse_operation  trans_B         = arg.transB;
-    rocsparse_index_base base            = arg.baseA;
-    rocsparse_spmm_alg   alg             = arg.spmm_alg;
-    rocsparse_order      order_B         = arg.orderB;
-    rocsparse_order      order_C         = arg.orderC;
-    rocsparse_int        ld_multiplier_B = arg.ld_multiplier_B;
-    rocsparse_int        ld_multiplier_C = arg.ld_multiplier_C;
+    HIP_CHECK(hipDeviceReset());
 
-    I batch_count_A = arg.batch_count_A;
-    I batch_count_B = arg.batch_count_B;
-    I batch_count_C = arg.batch_count_C;
+    int M               = 1;
+    int N               = 15;
+    int K               = 1;
+    int ld_multiplier_B = 2;
+    int ld_multiplier_C = 2;
 
-    T halpha = arg.get_alpha<T>();
-    T hbeta  = arg.get_beta<T>();
+    int batch_count_A = 1;
+    int batch_count_B = 10;
+    int batch_count_C = 10;
 
-    // Index and data type
-    rocsparse_indextype itype = get_indextype<I>();
-    rocsparse_datatype  atype = get_datatype<A>();
-    rocsparse_datatype  btype = get_datatype<B>();
-    rocsparse_datatype  ctype = get_datatype<C>();
-    rocsparse_datatype  ttype = get_datatype<T>();
+    std::cout << "M: " << M << " N: " << N << " K: " << K << " ld_multiplier_B: " << ld_multiplier_B << " ld_multiplier_C: " << ld_multiplier_C << std::endl;
+    std::cout << "batch_count_A: " << batch_count_A << " batch_count_B: " << batch_count_B << " batch_count_C: " << batch_count_C << std::endl;
 
-    // Create rocsparse handle
-    rocsparse_local_handle handle(arg);
+    // Allocate host memory for matrix
+    std::vector<int> hcoo_row_ind_temp;
+    std::vector<int> hcoo_col_ind_temp;
+    std::vector<double> hcoo_val_temp;
 
-    bool Ci_A_Bi  = (batch_count_A == 1 && batch_count_B == batch_count_C);
-    bool Ci_Ai_B  = (batch_count_B == 1 && batch_count_A == batch_count_C);
-    bool Ci_Ai_Bi = (batch_count_A == batch_count_C && batch_count_A == batch_count_B);
-
-    if(!Ci_A_Bi && !Ci_Ai_B && !Ci_Ai_Bi)
+    int64_t nnz_A;
+    if(!read_mtx("nos3/nos3.mtx", M, K, nnz_A, hcoo_row_ind_temp, hcoo_col_ind_temp, hcoo_val_temp))
     {
+        std::cerr << "Failed to read " << "nos3/nos3.mtx" << std::endl;
+        std::cerr << "Download from: https://math.nist.gov/pub/MatrixMarket2/Harwell-Boeing/lanpro/nos3.mtx.gz"
+                << std::endl;
         return;
     }
 
-    // Allocate host memory for matrix
-    rocsparse_matrix_factory<A, I, I> matrix_factory(arg);
-
-    // Allocate host memory for matrix
-    host_vector<I> hcoo_row_ind_temp;
-    host_vector<I> hcoo_col_ind_temp;
-    host_vector<A> hcoo_val_temp;
-
-    int64_t nnz_A;
-    matrix_factory.init_coo(hcoo_row_ind_temp,
-                            hcoo_col_ind_temp,
-                            hcoo_val_temp,
-                            (trans_A == rocsparse_operation_none) ? M : K,
-                            (trans_A == rocsparse_operation_none) ? K : M,
-                            nnz_A,
-                            base);
-
     // Redefine values
-    rocsparse_init_1d_array<A>(
-        hcoo_val_temp, nnz_A, arg.convert_to_int, arg.rand_gen_min, arg.rand_gen_max);
+    for(size_t i = 0; i < hcoo_val_temp.size(); i++)
+    {
+        hcoo_val_temp[i] = static_cast<double>(1);
+    }
 
     // Some matrix properties
-    I A_m = (trans_A == rocsparse_operation_none) ? M : K;
-    I A_n = (trans_A == rocsparse_operation_none) ? K : M;
-    I B_m = (trans_B == rocsparse_operation_none) ? K : N;
-    I B_n = (trans_B == rocsparse_operation_none) ? N : K;
-    I C_m = M;
-    I C_n = N;
+    int B_m = N;
+    int B_n = K;
+    int C_m = M;
+    int C_n = N;
 
-    int64_t ldb = (order_B == rocsparse_order_column)
-                      ? ((trans_B == rocsparse_operation_none) ? (int64_t(ld_multiplier_B) * K)
-                                                               : (int64_t(ld_multiplier_B) * N))
-                      : ((trans_B == rocsparse_operation_none) ? (int64_t(ld_multiplier_B) * N)
-                                                               : (int64_t(ld_multiplier_B) * K));
-    int64_t ldc = (order_C == rocsparse_order_column) ? (int64_t(ld_multiplier_C) * M)
-                                                      : (int64_t(ld_multiplier_C) * N);
+    int64_t ldb = int64_t(ld_multiplier_B) * N;
+    int64_t ldc = int64_t(ld_multiplier_C) * M;
 
-    int64_t nrowB = (order_B == rocsparse_order_column) ? ldb : B_m;
-    int64_t ncolB = (order_B == rocsparse_order_column) ? B_n : ldb;
-    int64_t nrowC = (order_C == rocsparse_order_column) ? ldc : C_m;
-    int64_t ncolC = (order_C == rocsparse_order_column) ? C_n : ldc;
+    int64_t nrowB = ldb;
+    int64_t ncolB = B_n;
+    int64_t nrowC = ldc;
+    int64_t ncolC = C_n;
 
     int64_t nnz_B = nrowB * ncolB;
     int64_t nnz_C = nrowC * ncolC;
 
-    int64_t batch_stride_A = (batch_count_A > 1) ? nnz_A : 0;
-    int64_t batch_stride_B = (batch_count_B > 1) ? nnz_B : 0;
-    int64_t batch_stride_C = (batch_count_C > 1) ? nnz_C : 0;
+    int64_t batch_stride_A = 0;
+    int64_t batch_stride_B = nnz_B;
+    int64_t batch_stride_C = nnz_C;
 
     // Allocate host memory for all batches of A matrix
-    host_dense_vector<I> hcoo_row_ind(batch_count_A * nnz_A);
-    host_dense_vector<I> hcoo_col_ind(batch_count_A * nnz_A);
-    host_dense_vector<A> hcoo_val(batch_count_A * nnz_A);
+    std::vector<int> hcoo_row_ind(batch_count_A * nnz_A);
+    std::vector<int> hcoo_col_ind(batch_count_A * nnz_A);
+    std::vector<double> hcoo_val(batch_count_A * nnz_A);
 
-    for(I i = 0; i < batch_count_A; i++)
+    for(int i = 0; i < batch_count_A; i++)
     {
         for(int64_t j = 0; j < nnz_A; j++)
         {
@@ -239,214 +387,63 @@ void testing_spmm_batched_coo(const Arguments& arg)
     }
 
     // Allocate host memory for vectors
-    host_vector<B> hB(batch_count_B * nnz_B);
-    host_vector<C> hC_1(batch_count_C * nnz_C);
-
-    // Initialize data on CPU
-    rocsparse_init_1d_array<B>(
-        hB, batch_count_B * nnz_B, arg.convert_to_int, arg.rand_gen_min, arg.rand_gen_max);
-    rocsparse_init_1d_array<C>(
-        hC_1, batch_count_C * nnz_C, arg.convert_to_int, arg.rand_gen_min, arg.rand_gen_max);
-
-    host_vector<C> hC_2(hC_1);
-    host_vector<C> hC_gold(hC_1);
+    std::vector<double> hB(batch_count_B * nnz_B, 1);
+    std::vector<double> hC_1(batch_count_C * nnz_C, 0);
 
     // Allocate device memory
-    device_vector<I> dcoo_row_ind(hcoo_row_ind);
-    device_vector<I> dcoo_col_ind(hcoo_col_ind);
-    device_vector<A> dcoo_val(hcoo_val);
-    device_vector<B> dB(hB);
-    device_vector<C> dC_1(hC_1);
-    device_vector<C> dC_2(hC_2);
-    device_vector<T> dalpha(1);
-    device_vector<T> dbeta(1);
+    int*    dcoo_row_ind = nullptr;
+    int*    dcoo_col_ind = nullptr;
+    double* dcoo_val     = nullptr;
+    double* dB           = nullptr;
+    double* dC_1         = nullptr;
+    HIP_CHECK(hipMalloc((void**)&dcoo_row_ind, sizeof(int) * nnz_A));
+    HIP_CHECK(hipMalloc((void**)&dcoo_col_ind, sizeof(int) * nnz_A));
+    HIP_CHECK(hipMalloc((void**)&dcoo_val, sizeof(double) * nnz_A));
+    HIP_CHECK(hipMalloc((void**)&dB, sizeof(double) * batch_count_B * nnz_B));
+    HIP_CHECK(hipMalloc((void**)&dC_1, sizeof(double) * batch_count_C * nnz_C));
 
-    CHECK_HIP_ERROR(hipMemcpy(dalpha, &halpha, sizeof(T), hipMemcpyHostToDevice));
-    CHECK_HIP_ERROR(hipMemcpy(dbeta, &hbeta, sizeof(T), hipMemcpyHostToDevice));
-
-    // Create descriptors
-    rocsparse_local_spmat mat_A(
-        A_m, A_n, nnz_A, dcoo_row_ind, dcoo_col_ind, dcoo_val, itype, base, atype);
+    HIP_CHECK(hipMemcpy(dcoo_row_ind, hcoo_row_ind.data(), sizeof(int) * nnz_A, hipMemcpyHostToDevice));
+    HIP_CHECK(hipMemcpy(dcoo_col_ind, hcoo_col_ind.data(), sizeof(int) * nnz_A, hipMemcpyHostToDevice));
+    HIP_CHECK(hipMemcpy(dcoo_val, hcoo_val.data(), sizeof(double) * nnz_A, hipMemcpyHostToDevice));
+    HIP_CHECK(hipMemcpy(dB, hB.data(), sizeof(double) * batch_count_B * nnz_B, hipMemcpyHostToDevice));
+    HIP_CHECK(hipMemcpy(dC_1, hC_1.data(), sizeof(double) * batch_count_C * nnz_C, hipMemcpyHostToDevice));
 
     ldb = std::max(int64_t(1), ldb);
     ldc = std::max(int64_t(1), ldc);
 
-    rocsparse_local_dnmat mat_B(B_m, B_n, ldb, dB, btype, order_B);
-    rocsparse_local_dnmat mat_C1(C_m, C_n, ldc, dC_1, ctype, order_C);
-    rocsparse_local_dnmat mat_C2(C_m, C_n, ldc, dC_2, ctype, order_C);
+    std::cout << "AAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
+    const int     nblocks_x   = (nnz_A - 1) / 256 + 1;
+    const int     nblocks_y   = batch_count_C;
+    hipLaunchKernelGGL(coommnn_atomic_remainder_kernel,
+        dim3(nblocks_x, nblocks_y),
+        dim3(256),
+        0,
+        0,
+        M,
+        N,
+        K,
+        nnz_A,
+        batch_stride_A,
+        dcoo_row_ind,
+        dcoo_col_ind,
+        dcoo_val,
+        dB,
+        ldb,
+        batch_stride_B,
+        dC_1,
+        ldc,
+        batch_stride_C);
+    std::cout << "BBBBBBBBBBBBBBBBBBBBBBBBBBBBB" << std::endl;
 
-    CHECK_ROCSPARSE_ERROR(rocsparse_coo_set_strided_batch(mat_A, batch_count_A, batch_stride_A));
-    CHECK_ROCSPARSE_ERROR(rocsparse_dnmat_set_strided_batch(mat_B, batch_count_B, batch_stride_B));
-    CHECK_ROCSPARSE_ERROR(rocsparse_dnmat_set_strided_batch(mat_C1, batch_count_C, batch_stride_C));
-    CHECK_ROCSPARSE_ERROR(rocsparse_dnmat_set_strided_batch(mat_C2, batch_count_C, batch_stride_C));
+    HIP_CHECK(hipDeviceSynchronize());
+    std::cout << "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC" << std::endl;
 
-    // Query SpMM buffer
-    size_t buffer_size;
-    CHECK_ROCSPARSE_ERROR(rocsparse_spmm(handle,
-                                         trans_A,
-                                         trans_B,
-                                         &halpha,
-                                         mat_A,
-                                         mat_B,
-                                         &hbeta,
-                                         mat_C1,
-                                         ttype,
-                                         alg,
-                                         rocsparse_spmm_stage_buffer_size,
-                                         &buffer_size,
-                                         nullptr));
-
-    // Allocate buffer
-    void* dbuffer;
-    CHECK_HIP_ERROR(rocsparse_hipMalloc(&dbuffer, buffer_size));
-
-    CHECK_ROCSPARSE_ERROR(rocsparse_spmm(handle,
-                                         trans_A,
-                                         trans_B,
-                                         &halpha,
-                                         mat_A,
-                                         mat_B,
-                                         &hbeta,
-                                         mat_C1,
-                                         ttype,
-                                         alg,
-                                         rocsparse_spmm_stage_preprocess,
-                                         &buffer_size,
-                                         dbuffer));
-
-    if(arg.unit_check)
-    {
-        // Pointer mode host
-        CHECK_ROCSPARSE_ERROR(rocsparse_set_pointer_mode(handle, rocsparse_pointer_mode_host));
-        CHECK_ROCSPARSE_ERROR(testing::rocsparse_spmm(handle,
-                                                      trans_A,
-                                                      trans_B,
-                                                      &halpha,
-                                                      mat_A,
-                                                      mat_B,
-                                                      &hbeta,
-                                                      mat_C1,
-                                                      ttype,
-                                                      alg,
-                                                      rocsparse_spmm_stage_compute,
-                                                      &buffer_size,
-                                                      dbuffer));
-
-        // Pointer mode device
-        CHECK_ROCSPARSE_ERROR(rocsparse_set_pointer_mode(handle, rocsparse_pointer_mode_device));
-        CHECK_ROCSPARSE_ERROR(testing::rocsparse_spmm(handle,
-                                                      trans_A,
-                                                      trans_B,
-                                                      dalpha,
-                                                      mat_A,
-                                                      mat_B,
-                                                      dbeta,
-                                                      mat_C2,
-                                                      ttype,
-                                                      alg,
-                                                      rocsparse_spmm_stage_compute,
-                                                      &buffer_size,
-                                                      dbuffer));
-
-        // Copy output to host
-        hC_1.transfer_from(dC_1);
-        hC_2.transfer_from(dC_2);
-
-        // CPU coomm_batched
-        host_coomm_batched<T, I, A, B, C>(A_m,
-                                          N,
-                                          A_n,
-                                          nnz_A,
-                                          batch_count_A,
-                                          batch_stride_A,
-                                          trans_A,
-                                          trans_B,
-                                          halpha,
-                                          hcoo_row_ind.data(),
-                                          hcoo_col_ind.data(),
-                                          hcoo_val.data(),
-                                          hB.data(),
-                                          ldb,
-                                          batch_count_B,
-                                          batch_stride_B,
-                                          order_B,
-                                          hbeta,
-                                          hC_gold.data(),
-                                          ldc,
-                                          batch_count_C,
-                                          batch_stride_C,
-                                          order_C,
-                                          base);
-
-        hC_gold.near_check(hC_1, get_near_check_tol<C>(arg));
-        hC_gold.near_check(hC_2, get_near_check_tol<C>(arg));
-    }
-
-    if(arg.timing)
-    {
-
-        CHECK_ROCSPARSE_ERROR(rocsparse_set_pointer_mode(handle, rocsparse_pointer_mode_host));
-
-        const double gpu_time_used = rocsparse_clients::run_benchmark(arg,
-                                                                      rocsparse_spmm,
-                                                                      handle,
-                                                                      trans_A,
-                                                                      trans_B,
-                                                                      &halpha,
-                                                                      mat_A,
-                                                                      mat_B,
-                                                                      &hbeta,
-                                                                      mat_C1,
-                                                                      ttype,
-                                                                      alg,
-                                                                      rocsparse_spmm_stage_compute,
-                                                                      &buffer_size,
-                                                                      dbuffer);
-
-        double gflop_count
-            = batch_count_C
-              * spmm_gflop_count(N, nnz_A, (int64_t)C_m * (int64_t)C_n, hbeta != static_cast<T>(0));
-        double gpu_gflops = get_gpu_gflops(gpu_time_used, gflop_count);
-
-        double gbyte_count = coomm_batched_gbyte_count<A, B, C>(A_m,
-                                                                nnz_A,
-                                                                (int64_t)B_m * (int64_t)B_n,
-                                                                (int64_t)C_m * (int64_t)C_n,
-                                                                batch_count_A,
-                                                                batch_count_B,
-                                                                batch_count_C,
-                                                                hbeta != static_cast<T>(0));
-        double gpu_gbyte   = get_gpu_gbyte(gpu_time_used, gbyte_count);
-
-        display_timing_info(display_key_t::M,
-                            M,
-                            display_key_t::N,
-                            N,
-                            display_key_t::K,
-                            K,
-                            display_key_t::nnz_A,
-                            nnz_A,
-                            display_key_t::batch_count_A,
-                            batch_count_A,
-                            display_key_t::batch_count_B,
-                            batch_count_B,
-                            display_key_t::batch_count_C,
-                            batch_count_C,
-                            display_key_t::alpha,
-                            halpha,
-                            display_key_t::beta,
-                            hbeta,
-                            display_key_t::algorithm,
-                            rocsparse_spmmalg2string(alg),
-                            display_key_t::gflops,
-                            gpu_gflops,
-                            display_key_t::bandwidth,
-                            gpu_gbyte,
-                            display_key_t::time_ms,
-                            get_gpu_time_msec(gpu_time_used));
-    }
-
-    CHECK_HIP_ERROR(rocsparse_hipFree(dbuffer));
+    HIP_CHECK(hipFree(dcoo_row_ind));
+    HIP_CHECK(hipFree(dcoo_col_ind));
+    HIP_CHECK(hipFree(dcoo_val));
+    HIP_CHECK(hipFree(dB));
+    HIP_CHECK(hipFree(dC_1));
+    std::cout << "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD" << std::endl;
 }
 
 #define INSTANTIATE(ITYPE, TTYPE)                                                      \

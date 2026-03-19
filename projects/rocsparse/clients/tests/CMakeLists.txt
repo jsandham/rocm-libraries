@@ -183,6 +183,7 @@ set(ROCSPARSE_TEST_SOURCES
   test_spmm_batched_csr.cpp
   test_spmm_batched_csc.cpp
   test_spmm_batched_coo.cpp
+  test_spmm_batched_coo_minimal.cpp
   test_spmm_batched_bell.cpp
   test_spvv.cpp
   test_sparse_to_dense_coo.cpp

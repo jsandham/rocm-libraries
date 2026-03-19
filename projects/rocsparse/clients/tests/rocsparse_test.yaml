@@ -138,6 +138,7 @@ include: test_spmm_bell.yaml
 include: test_spmm_batched_csr.yaml
 include: test_spmm_batched_csc.yaml
 include: test_spmm_batched_coo.yaml
+include: test_spmm_batched_coo_minimal.yaml
 include: test_spmm_batched_bell.yaml
 include: test_spvv.yaml
 include: test_sparse_to_dense_coo.yaml

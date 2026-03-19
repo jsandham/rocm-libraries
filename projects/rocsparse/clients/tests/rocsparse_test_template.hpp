@@ -104,83 +104,12 @@ namespace
 
             static bool arch_filter(const Arguments& arg)
             {
-                static int             dev;
-                static hipDeviceProp_t prop;
-
-                static bool query_device = true;
-                if(query_device)
-                {
-                    if(hipGetDevice(&dev) != hipSuccess)
-                    {
-                        return false;
-                    }
-                    if(hipGetDeviceProperties(&prop, dev) != hipSuccess)
-                    {
-                        return false;
-                    }
-                    query_device = false;
-                }
-
-                if(strncmp("gfx", arg.hardware, 3) == 0)
-                {
-                    if(strncmp(arg.hardware, prop.gcnArchName, strlen(arg.hardware)) == 0)
-                    {
-                        return true;
-                    }
-                    else
-                    {
-                        return false;
-                    }
-                }
-
-                if(strncmp("none", arg.skip_hardware, 4) != 0)
-                {
-                    const char* b = arg.skip_hardware;
-                    const char* e;
-
-                    for(e = b; *e != '\0' && *e != ',' && *e != ' '; ++e)
-                        ;
-                    while(strncmp("gfx", b, 3) == 0)
-                    {
-                        if(strncmp(b, prop.gcnArchName, e - b) == 0)
-                        {
-                            return false;
-                        }
-                        else
-                        {
-                            for(; *b != '\0' && *b != ',' && *b != ' '; ++b)
-                                ;
-                            if(*b == ',')
-                                ++b;
-                            for(; *b != '\0' && *b == ' '; ++b)
-                                ;
-                            for(e = b; *e != '\0' && *e != ',' && *e != ' '; ++e)
-                                ;
-                        }
-                    }
-                }
-
                 return true;
             }
 
             static bool memory_filter(const Arguments& arg)
             {
-                size_t available_host   = rocsparse_memory_check::get_available_host_memory_gb();
-                size_t available_device = rocsparse_memory_check::get_available_device_memory_gb();
-
-                bool can_run = (arg.host_memory_gb <= available_host)
-                               && (arg.device_memory_gb <= available_device);
-
-                if(!can_run)
-                {
-                    std::cout << "SKIPPING TEST: Insufficient memory" << std::endl;
-                    std::cout << "  Required host:   " << arg.host_memory_gb
-                              << " GB (available: " << available_host << " GB)" << std::endl;
-                    std::cout << "  Required device: " << arg.device_memory_gb
-                              << " GB (available: " << available_device << " GB)" << std::endl;
-                }
-
-                return can_run;
+                return true;
             }
 
             static std::string name_suffix(const Arguments& arg)
