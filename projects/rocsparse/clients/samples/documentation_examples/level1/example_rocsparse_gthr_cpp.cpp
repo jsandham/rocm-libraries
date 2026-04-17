@@ -44,7 +44,7 @@
         }                                                                             \
     }
 
-//! [doc example]
+//! [doc example start]
 int main()
 {
     // Number of non-zeros of the sparse vector
@@ -57,10 +57,10 @@ int main()
     rocsparse_int hx_ind[nnz] = {0, 3, 5};
 
     // Sparse value vector
-    float hx_val[nnz] = {1.0f, 2.0f, 3.0f};
+    float hx_val[nnz];
 
     // Dense vector
-    float hy[size] = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f};
+    float hy[size] = {1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0};
 
     // Index base
     rocsparse_index_base idx_base = rocsparse_index_base_zero;
@@ -75,18 +75,24 @@ int main()
     HIP_CHECK(hipMalloc(&dy, sizeof(float) * size));
 
     HIP_CHECK(hipMemcpy(dx_ind, hx_ind, sizeof(rocsparse_int) * nnz, hipMemcpyHostToDevice));
-    HIP_CHECK(hipMemcpy(dx_val, hx_val, sizeof(float) * nnz, hipMemcpyHostToDevice));
     HIP_CHECK(hipMemcpy(dy, hy, sizeof(float) * size, hipMemcpyHostToDevice));
 
     // rocSPARSE handle
     rocsparse_handle handle;
     ROCSPARSE_CHECK(rocsparse_create_handle(&handle));
 
-    // Call sdoti to compute the dot product
-    float dot;
-    ROCSPARSE_CHECK(rocsparse_sdoti(handle, nnz, dx_val, dx_ind, dy, &dot, idx_base));
+    // Call sgthr
+    ROCSPARSE_CHECK(rocsparse_sgthr(handle, nnz, dy, dx_val, dx_ind, idx_base));
 
-    std::cout << "dot: " << dot << std::endl;
+    // Copy result back to host
+    HIP_CHECK(hipMemcpy(hx_val, dx_val, sizeof(float) * nnz, hipMemcpyDeviceToHost));
+
+    std::cout << "hx_val" << std::endl;
+    for(rocsparse_int i = 0; i < nnz; i++)
+    {
+        std::cout << hx_val[i] << " ";
+    }
+    std::cout << "" << std::endl;
 
     // Clear rocSPARSE
     ROCSPARSE_CHECK(rocsparse_destroy_handle(handle));
@@ -98,4 +104,4 @@ int main()
 
     return 0;
 }
-//! [doc example]
+//! [doc example end]

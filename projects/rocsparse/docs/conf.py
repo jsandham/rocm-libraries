@@ -34,3 +34,12 @@ external_toc_path = "./sphinx/_toc.yml"
 
 for sphinx_var in ROCmDocs.SPHINX_VARS:
     globals()[sphinx_var] = getattr(docs_core, sphinx_var)
+
+# Enable the sphinx-tabs extension so we can present code examples in tabs
+# (e.g. C++ / C variants of each routine's documentation example).
+if 'extensions' not in globals():
+    extensions = []
+extensions.extend(['sphinx_tabs.tabs'])
+
+# Prevent sphinx-tabs from closing when the currently-active tab is clicked.
+sphinx_tabs_disable_tab_closing = True

@@ -173,8 +173,20 @@ if(TARGET rocsparse)
   endif()
 endif()
 
-# Build documentation examples
-FILE(GLOB_RECURSE DOCUMENTATION_EXAMPLES documentation_examples/*.cpp)
+# Build documentation examples.
+#
+# level1 has its own CMakeLists.txt that explicitly lists both C and C++
+# variants (this mirrors the approach used by hipSPARSE). The other
+# categories still use a recursive glob for now.
+add_subdirectory(documentation_examples/level1)
+
+FILE(GLOB_RECURSE DOCUMENTATION_EXAMPLES
+     documentation_examples/level2/*.cpp
+     documentation_examples/level3/*.cpp
+     documentation_examples/precond/*.cpp
+     documentation_examples/conversion/*.cpp
+     documentation_examples/extra/*.cpp
+     documentation_examples/generic/*.cpp)
 
 foreach(file ${DOCUMENTATION_EXAMPLES})
     add_rocsparse_example(${file})

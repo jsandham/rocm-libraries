@@ -85,9 +85,6 @@ extern "C" {
 *  \retval rocsparse_status_invalid_size \p nnz is invalid.
 *  \retval rocsparse_status_invalid_pointer \p alpha, \p x_val, \p x_ind or \p y pointer
 *          is invalid.
-*
-*  \par Example
-*  \snippet example_rocsparse_axpyi.cpp doc example
 */
 /**@{*/
 ROCSPARSE_EXPORT

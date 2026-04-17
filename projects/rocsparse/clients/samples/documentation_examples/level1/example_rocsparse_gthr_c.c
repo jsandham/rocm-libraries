@@ -21,87 +21,85 @@
  *
  * ************************************************************************ */
 
-#include <iostream>
-
 #include <rocsparse/rocsparse.h>
+#include <stdio.h>
 
-#define HIP_CHECK(stat)                                                                       \
-    {                                                                                         \
-        if(stat != hipSuccess)                                                                \
-        {                                                                                     \
-            std::cerr << "Error: hip error " << stat << " in line " << __LINE__ << std::endl; \
-            return -1;                                                                        \
-        }                                                                                     \
+#define HIP_CHECK(stat)                                                 \
+    {                                                                   \
+        if(stat != hipSuccess)                                          \
+        {                                                               \
+            fprintf(stderr, "Error: hip error in line %d\n", __LINE__); \
+            return -1;                                                  \
+        }                                                               \
     }
 
-#define ROCSPARSE_CHECK(stat)                                                         \
-    {                                                                                 \
-        if(stat != rocsparse_status_success)                                          \
-        {                                                                             \
-            std::cerr << "Error: rocsparse error " << stat << " in line " << __LINE__ \
-                      << std::endl;                                                   \
-            return -1;                                                                \
-        }                                                                             \
+#define ROCSPARSE_CHECK(stat)                                                 \
+    {                                                                         \
+        if(stat != rocsparse_status_success)                                  \
+        {                                                                     \
+            fprintf(stderr, "Error: rocsparse error in line %d\n", __LINE__); \
+            return -1;                                                        \
+        }                                                                     \
     }
 
-//! [doc example]
-int main()
+/*! [doc example start] */
+int main(void)
 {
-    // Number of non-zeros of the sparse vector
+    /* Number of non-zeros of the sparse vector */
     const rocsparse_int nnz = 3;
 
-    // Number of entries in the dense vector
+    /* Number of entries in the dense vector */
     const rocsparse_int size = 9;
 
-    // Sparse index vector
-    rocsparse_int hx_ind[nnz] = {0, 3, 5};
+    /* Sparse index vector */
+    rocsparse_int hx_ind[] = {0, 3, 5};
 
-    // Sparse value vector
-    float hx_val[nnz];
+    /* Sparse value vector (will be filled by gthr) */
+    float hx_val[3];
 
-    // Dense vector
-    float hy[size] = {1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0};
+    /* Dense vector */
+    float hy[] = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f};
 
-    // Index base
+    /* Index base */
     rocsparse_index_base idx_base = rocsparse_index_base_zero;
 
-    // Offload data to device
+    /* Offload data to device */
     rocsparse_int* dx_ind;
     float*         dx_val;
     float*         dy;
 
-    HIP_CHECK(hipMalloc(&dx_ind, sizeof(rocsparse_int) * nnz));
-    HIP_CHECK(hipMalloc(&dx_val, sizeof(float) * nnz));
-    HIP_CHECK(hipMalloc(&dy, sizeof(float) * size));
+    HIP_CHECK(hipMalloc((void**)&dx_ind, sizeof(rocsparse_int) * nnz));
+    HIP_CHECK(hipMalloc((void**)&dx_val, sizeof(float) * nnz));
+    HIP_CHECK(hipMalloc((void**)&dy, sizeof(float) * size));
 
     HIP_CHECK(hipMemcpy(dx_ind, hx_ind, sizeof(rocsparse_int) * nnz, hipMemcpyHostToDevice));
     HIP_CHECK(hipMemcpy(dy, hy, sizeof(float) * size, hipMemcpyHostToDevice));
 
-    // rocSPARSE handle
+    /* rocSPARSE handle */
     rocsparse_handle handle;
     ROCSPARSE_CHECK(rocsparse_create_handle(&handle));
 
-    // Call sgthr
+    /* Call sgthr */
     ROCSPARSE_CHECK(rocsparse_sgthr(handle, nnz, dy, dx_val, dx_ind, idx_base));
 
-    // Copy result back to host
+    /* Copy result back to host */
     HIP_CHECK(hipMemcpy(hx_val, dx_val, sizeof(float) * nnz, hipMemcpyDeviceToHost));
 
-    std::cout << "hx_val" << std::endl;
+    printf("hx_val\n");
     for(rocsparse_int i = 0; i < nnz; i++)
     {
-        std::cout << hx_val[i] << " ";
+        printf("%f ", hx_val[i]);
     }
-    std::cout << "" << std::endl;
+    printf("\n");
 
-    // Clear rocSPARSE
+    /* Clear rocSPARSE */
     ROCSPARSE_CHECK(rocsparse_destroy_handle(handle));
 
-    // Clear device memory
+    /* Clear device memory */
     HIP_CHECK(hipFree(dx_ind));
     HIP_CHECK(hipFree(dx_val));
     HIP_CHECK(hipFree(dy));
 
     return 0;
 }
-//! [doc example]
+/*! [doc example end] */

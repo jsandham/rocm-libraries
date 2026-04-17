@@ -22,6 +22,24 @@ rocsparse_axpyi()
   :outline:
 .. doxygenfunction:: rocsparse_zaxpyi
 
+.. tabs::
+
+   .. tab:: C++
+
+      .. literalinclude:: ../../clients/samples/documentation_examples/level1/example_rocsparse_axpyi_cpp.cpp
+         :language: cpp
+         :start-after: //! [doc example start]
+         :end-before: //! [doc example end]
+         :linenos:
+
+   .. tab:: C
+
+      .. literalinclude:: ../../clients/samples/documentation_examples/level1/example_rocsparse_axpyi_c.c
+         :language: c
+         :start-after: /*! [doc example start] */
+         :end-before: /*! [doc example end] */
+         :linenos:
+
 rocsparse_doti()
 ----------------
 
@@ -32,6 +50,24 @@ rocsparse_doti()
 .. doxygenfunction:: rocsparse_cdoti
   :outline:
 .. doxygenfunction:: rocsparse_zdoti
+
+.. tabs::
+
+   .. tab:: C++
+
+      .. literalinclude:: ../../clients/samples/documentation_examples/level1/example_rocsparse_doti_cpp.cpp
+         :language: cpp
+         :start-after: //! [doc example start]
+         :end-before: //! [doc example end]
+         :linenos:
+
+   .. tab:: C
+
+      .. literalinclude:: ../../clients/samples/documentation_examples/level1/example_rocsparse_doti_c.c
+         :language: c
+         :start-after: /*! [doc example start] */
+         :end-before: /*! [doc example end] */
+         :linenos:
 
 rocsparse_dotci()
 -----------------
@@ -51,6 +87,24 @@ rocsparse_gthr()
   :outline:
 .. doxygenfunction:: rocsparse_zgthr
 
+.. tabs::
+
+   .. tab:: C++
+
+      .. literalinclude:: ../../clients/samples/documentation_examples/level1/example_rocsparse_gthr_cpp.cpp
+         :language: cpp
+         :start-after: //! [doc example start]
+         :end-before: //! [doc example end]
+         :linenos:
+
+   .. tab:: C
+
+      .. literalinclude:: ../../clients/samples/documentation_examples/level1/example_rocsparse_gthr_c.c
+         :language: c
+         :start-after: /*! [doc example start] */
+         :end-before: /*! [doc example end] */
+         :linenos:
+
 rocsparse_gthrz()
 -----------------
 
@@ -69,6 +123,24 @@ rocsparse_roti()
   :outline:
 .. doxygenfunction:: rocsparse_droti
 
+.. tabs::
+
+   .. tab:: C++
+
+      .. literalinclude:: ../../clients/samples/documentation_examples/level1/example_rocsparse_roti_cpp.cpp
+         :language: cpp
+         :start-after: //! [doc example start]
+         :end-before: //! [doc example end]
+         :linenos:
+
+   .. tab:: C
+
+      .. literalinclude:: ../../clients/samples/documentation_examples/level1/example_rocsparse_roti_c.c
+         :language: c
+         :start-after: /*! [doc example start] */
+         :end-before: /*! [doc example end] */
+         :linenos:
+
 rocsparse_sctr()
 ----------------
 
@@ -79,3 +151,21 @@ rocsparse_sctr()
 .. doxygenfunction:: rocsparse_csctr
   :outline:
 .. doxygenfunction:: rocsparse_zsctr
+
+.. tabs::
+
+   .. tab:: C++
+
+      .. literalinclude:: ../../clients/samples/documentation_examples/level1/example_rocsparse_sctr_cpp.cpp
+         :language: cpp
+         :start-after: //! [doc example start]
+         :end-before: //! [doc example end]
+         :linenos:
+
+   .. tab:: C
+
+      .. literalinclude:: ../../clients/samples/documentation_examples/level1/example_rocsparse_sctr_c.c
+         :language: c
+         :start-after: /*! [doc example start] */
+         :end-before: /*! [doc example end] */
+         :linenos:
