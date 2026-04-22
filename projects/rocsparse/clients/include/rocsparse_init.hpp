@@ -32,6 +32,22 @@
 #include <fstream>
 
 /* ==================================================================================== */
+/*! \brief How \ref rocsparse_init_gebsr_random builds the BSR/GEBSR matrix from random CSR. */
+enum class bsr_construction_alg
+{
+    /*! Use CSR with dimensions \p Mb x \p Nb (block counts), then expand each scalar nnz into
+     *  a dense \p row_block_dim x \p col_block_dim block of values (total values
+     *  \p row_block_dim * \p col_block_dim * nnz). */
+    expand_csr = 0,
+    /*! Build CSR with scalar size \f$M = M_b \cdot r_{bd}\f$, \f$N = N_b \cdot c_{bd}\f$, then
+     *  convert with \p rocsparse_csr2gebsr so the result has block grid
+     *  \f$M_b \times N_b\f$ with \f$M_b = \lceil M / r_{bd} \rceil\f$,
+     *  \f$N_b = \lceil N / c_{bd} \rceil\f$ (here \f$M = M_b \cdot r_{bd}\f$,
+     *  \f$N = N_b \cdot c_{bd}\f$). */
+    convert_csr = 1
+};
+
+/* ==================================================================================== */
 /*! \brief  matrix/vector initialization: */
 // for vector x (M=1, N=lengthX, lda=incx);
 // for complex number, the real/imag part would be initialized with the same value
@@ -404,7 +420,9 @@ void rocsparse_init_gebsr_rocalution(const char*          filename,
                                      I&                   nnzb,
                                      J                    row_block_dim,
                                      J                    col_block_dim,
-                                     rocsparse_index_base base);
+                                     rocsparse_index_base base,
+                                     bsr_construction_alg construction
+                                     = bsr_construction_alg::convert_csr);
 
 /* ==================================================================================== */
 /*! \brief  Read matrix from binary file in rocSPARSEIO format */
@@ -484,10 +502,13 @@ void rocsparse_init_gebsr_random(std::vector<I>&            row_ptr,
                                  I&                         nnzb,
                                  J                          row_block_dim,
                                  J                          col_block_dim,
+                                 rocsparse_direction        block_dir,
                                  rocsparse_index_base       base,
                                  rocsparse_matrix_init_kind init_kind,
                                  bool                       full_rank = false,
-                                 bool                       to_int    = false);
+                                 bool                       to_int    = false,
+                                 bsr_construction_alg     construction
+                                 = bsr_construction_alg::convert_csr);
 
 /* ==================================================================================== */
 /*! \brief  Generate a tridiagonal sparse matrix in COO format */

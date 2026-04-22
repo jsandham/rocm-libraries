@@ -65,7 +65,9 @@ public:
                             rocsparse_index_base   base,
                             rocsparse_matrix_type  matrix_type,
                             rocsparse_fill_mode    uplo,
-                            rocsparse_storage_mode storage) override;
+                            rocsparse_storage_mode storage,
+                            bsr_construction_alg   construction
+                            = bsr_construction_alg::convert_csr) override;
 
     virtual void init_coo(std::vector<I>&        coo_row_ind,
                           std::vector<I>&        coo_col_ind,

@@ -150,118 +150,122 @@ rocsparse_matrix_factory_file<MATRIX_INIT, T, I, J>::rocsparse_matrix_factory_fi
     : m_filename(filename)
     , m_toint(toint){};
 
-template <typename T, typename I, typename J>
-struct spec
-{
-    template <rocsparse_matrix_init MATRIX_INIT>
-    static void init_gebsr_rocalution(rocsparse_matrix_factory_file<MATRIX_INIT, T, I, J>& factory,
-                                      std::vector<I>&        bsr_row_ptr,
-                                      std::vector<J>&        bsr_col_ind,
-                                      std::vector<T>&        bsr_val,
-                                      rocsparse_direction    dirb,
-                                      J&                     Mb,
-                                      J&                     Nb,
-                                      I&                     nnzb,
-                                      J&                     row_block_dim,
-                                      J&                     col_block_dim,
-                                      rocsparse_index_base   base,
-                                      rocsparse_matrix_type  matrix_type,
-                                      rocsparse_fill_mode    uplo,
-                                      rocsparse_storage_mode storage)
-    {
-        ROCSPARSE_CLIENTS_ROUTINE_TRACE;
+// template <typename T, typename I, typename J>
+// struct spec
+// {
+//     template <rocsparse_matrix_init MATRIX_INIT>
+//     static void init_gebsr_rocalution(rocsparse_matrix_factory_file<MATRIX_INIT, T, I, J>& factory,
+//                                       std::vector<I>&        bsr_row_ptr,
+//                                       std::vector<J>&        bsr_col_ind,
+//                                       std::vector<T>&        bsr_val,
+//                                       rocsparse_direction    dirb,
+//                                       J&                     Mb,
+//                                       J&                     Nb,
+//                                       I&                     nnzb,
+//                                       J&                     row_block_dim,
+//                                       J&                     col_block_dim,
+//                                       rocsparse_index_base   base,
+//                                       rocsparse_matrix_type  matrix_type,
+//                                       rocsparse_fill_mode    uplo,
+//                                       rocsparse_storage_mode storage)
+//     {
+//         ROCSPARSE_CLIENTS_ROUTINE_TRACE;
 
-        factory.init_csr(
-            bsr_row_ptr, bsr_col_ind, bsr_val, Mb, Nb, nnzb, base, matrix_type, uplo, storage);
+//         std::cout << "BBBBBBBBBBBBBBBBBBBBBBBBBB" << std::endl;
 
-        // Then temporarily skip the values.
-        size_t nvalues = size_t(nnzb) * row_block_dim * col_block_dim;
-        bsr_val.resize(nvalues);
-        for(I i = 0; i < nvalues; ++i)
-        {
-            bsr_val[i] = random_cached_generator<T>();
-        }
-    }
-};
+//         factory.init_csr(
+//             bsr_row_ptr, bsr_col_ind, bsr_val, Mb, Nb, nnzb, base, matrix_type, uplo, storage);
 
-template <typename T>
-struct spec<T, rocsparse_int, rocsparse_int>
-{
-    template <rocsparse_matrix_init MATRIX_INIT>
-    static void init_gebsr_rocalution(
-        rocsparse_matrix_factory_file<MATRIX_INIT, T, rocsparse_int, rocsparse_int>& factory,
-        std::vector<rocsparse_int>&                                                  bsr_row_ptr,
-        std::vector<rocsparse_int>&                                                  bsr_col_ind,
-        std::vector<T>&                                                              bsr_val,
-        rocsparse_direction                                                          dirb,
-        rocsparse_int&                                                               Mb,
-        rocsparse_int&                                                               Nb,
-        rocsparse_int&                                                               nnzb,
-        rocsparse_int&                                                               row_block_dim,
-        rocsparse_int&                                                               col_block_dim,
-        rocsparse_index_base                                                         base,
-        rocsparse_matrix_type                                                        matrix_type,
-        rocsparse_fill_mode                                                          uplo,
-        rocsparse_storage_mode                                                       storage)
-    {
-        ROCSPARSE_CLIENTS_ROUTINE_TRACE;
+//         // Then temporarily skip the values.
+//         size_t nvalues = size_t(nnzb) * row_block_dim * col_block_dim;
+//         bsr_val.resize(nvalues);
+//         for(I i = 0; i < nvalues; ++i)
+//         {
+//             bsr_val[i] = random_cached_generator<T>();
+//         }
+//     }
+// };
 
-        //
-        // Initialize in case init_csr requires it as input.
-        //
-        rocsparse_int M = Mb * row_block_dim;
-        rocsparse_int N = Nb * col_block_dim;
+// template <typename T>
+// struct spec<T, rocsparse_int, rocsparse_int>
+// {
+//     template <rocsparse_matrix_init MATRIX_INIT>
+//     static void init_gebsr_rocalution(
+//         rocsparse_matrix_factory_file<MATRIX_INIT, T, rocsparse_int, rocsparse_int>& factory,
+//         std::vector<rocsparse_int>&                                                  bsr_row_ptr,
+//         std::vector<rocsparse_int>&                                                  bsr_col_ind,
+//         std::vector<T>&                                                              bsr_val,
+//         rocsparse_direction                                                          dirb,
+//         rocsparse_int&                                                               Mb,
+//         rocsparse_int&                                                               Nb,
+//         rocsparse_int&                                                               nnzb,
+//         rocsparse_int&                                                               row_block_dim,
+//         rocsparse_int&                                                               col_block_dim,
+//         rocsparse_index_base                                                         base,
+//         rocsparse_matrix_type                                                        matrix_type,
+//         rocsparse_fill_mode                                                          uplo,
+//         rocsparse_storage_mode                                                       storage)
+//     {
+//         ROCSPARSE_CLIENTS_ROUTINE_TRACE;
 
-        host_csr_matrix<T, rocsparse_int, rocsparse_int> hA_uncompressed(M, N, 0, base);
-        factory.init_csr(hA_uncompressed.ptr,
-                         hA_uncompressed.ind,
-                         hA_uncompressed.val,
-                         hA_uncompressed.m,
-                         hA_uncompressed.n,
-                         hA_uncompressed.nnz,
-                         hA_uncompressed.base,
-                         matrix_type,
-                         uplo,
-                         rocsparse_storage_mode_sorted);
+//         std::cout << "AAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
 
-        device_gebsr_matrix<T, rocsparse_int, rocsparse_int> that_on_device;
-        {
-            device_csr_matrix<T, rocsparse_int, rocsparse_int> dA_uncompressed(hA_uncompressed);
-            rocsparse_matrix_utils::convert(dA_uncompressed,
-                                            dirb,
-                                            row_block_dim,
-                                            col_block_dim,
-                                            base,
-                                            rocsparse_storage_mode_sorted,
-                                            that_on_device);
+//         //
+//         // Initialize in case init_csr requires it as input.
+//         //
+//         rocsparse_int M = Mb * row_block_dim;
+//         rocsparse_int N = Nb * col_block_dim;
 
-            switch(storage)
-            {
-            case rocsparse_storage_mode_unsorted:
-            {
-                host_gebsr_matrix<T, rocsparse_int, rocsparse_int> that(that_on_device);
-                rocsparse_matrix_utils::host_gebsrunsort<T>(
-                    that.ptr.data(), that.ind.data(), that.mb, that.base);
-                that_on_device(that);
-                break;
-            }
-            case rocsparse_storage_mode_sorted:
-            {
-                break;
-            }
-            }
-        }
+//         host_csr_matrix<T, rocsparse_int, rocsparse_int> hA_uncompressed(M, N, 0, base);
+//         factory.init_csr(hA_uncompressed.ptr,
+//                          hA_uncompressed.ind,
+//                          hA_uncompressed.val,
+//                          hA_uncompressed.m,
+//                          hA_uncompressed.n,
+//                          hA_uncompressed.nnz,
+//                          hA_uncompressed.base,
+//                          matrix_type,
+//                          uplo,
+//                          rocsparse_storage_mode_sorted);
 
-        Mb            = that_on_device.mb;
-        Nb            = that_on_device.nb;
-        nnzb          = that_on_device.nnzb;
-        row_block_dim = that_on_device.row_block_dim;
-        col_block_dim = that_on_device.col_block_dim;
-        that_on_device.ptr.transfer_to(bsr_row_ptr);
-        that_on_device.ind.transfer_to(bsr_col_ind);
-        that_on_device.val.transfer_to(bsr_val);
-    }
-};
+//         device_gebsr_matrix<T, rocsparse_int, rocsparse_int> that_on_device;
+//         {
+//             device_csr_matrix<T, rocsparse_int, rocsparse_int> dA_uncompressed(hA_uncompressed);
+//             rocsparse_matrix_utils::convert(dA_uncompressed,
+//                                             dirb,
+//                                             row_block_dim,
+//                                             col_block_dim,
+//                                             base,
+//                                             rocsparse_storage_mode_sorted,
+//                                             that_on_device);
+
+//             switch(storage)
+//             {
+//             case rocsparse_storage_mode_unsorted:
+//             {
+//                 host_gebsr_matrix<T, rocsparse_int, rocsparse_int> that(that_on_device);
+//                 rocsparse_matrix_utils::host_gebsrunsort<T>(
+//                     that.ptr.data(), that.ind.data(), that.mb, that.base);
+//                 that_on_device(that);
+//                 break;
+//             }
+//             case rocsparse_storage_mode_sorted:
+//             {
+//                 break;
+//             }
+//             }
+//         }
+
+//         Mb            = that_on_device.mb;
+//         Nb            = that_on_device.nb;
+//         nnzb          = that_on_device.nnzb;
+//         row_block_dim = that_on_device.row_block_dim;
+//         col_block_dim = that_on_device.col_block_dim;
+//         that_on_device.ptr.transfer_to(bsr_row_ptr);
+//         that_on_device.ind.transfer_to(bsr_col_ind);
+//         that_on_device.val.transfer_to(bsr_val);
+//     }
+// };
 
 template <rocsparse_matrix_init MATRIX_INIT, typename T, typename I, typename J>
 void rocsparse_matrix_factory_file<MATRIX_INIT, T, I, J>::init_gebsr(
@@ -277,7 +281,8 @@ void rocsparse_matrix_factory_file<MATRIX_INIT, T, I, J>::init_gebsr(
     rocsparse_index_base   base,
     rocsparse_matrix_type  matrix_type,
     rocsparse_fill_mode    uplo,
-    rocsparse_storage_mode storage)
+    rocsparse_storage_mode storage,
+    bsr_construction_alg   construction)
 {
     ROCSPARSE_CLIENTS_ROUTINE_TRACE;
 
@@ -285,6 +290,7 @@ void rocsparse_matrix_factory_file<MATRIX_INIT, T, I, J>::init_gebsr(
     {
     case rocsparse_matrix_file_mtx:
     {
+        (void)construction;
         rocsparse_init_gebsr_mtx(this->m_filename.c_str(),
                                  bsr_row_ptr,
                                  bsr_col_ind,
@@ -299,6 +305,7 @@ void rocsparse_matrix_factory_file<MATRIX_INIT, T, I, J>::init_gebsr(
     }
     case rocsparse_matrix_file_smtx:
     {
+        (void)construction;
         rocsparse_init_gebsr_smtx(this->m_filename.c_str(),
                                   bsr_row_ptr,
                                   bsr_col_ind,
@@ -313,6 +320,7 @@ void rocsparse_matrix_factory_file<MATRIX_INIT, T, I, J>::init_gebsr(
     }
     case rocsparse_matrix_file_bsmtx:
     {
+        (void)construction;
         rocsparse_init_gebsr_bsmtx(this->m_filename.c_str(),
                                    bsr_row_ptr,
                                    bsr_col_ind,
@@ -327,24 +335,36 @@ void rocsparse_matrix_factory_file<MATRIX_INIT, T, I, J>::init_gebsr(
     }
     case rocsparse_matrix_file_rocalution:
     {
-        spec<T, I, J>::init_gebsr_rocalution(*this,
-                                             bsr_row_ptr,
-                                             bsr_col_ind,
-                                             bsr_val,
-                                             dirb,
-                                             Mb,
-                                             Nb,
-                                             nnzb,
-                                             row_block_dim,
-                                             col_block_dim,
-                                             base,
-                                             matrix_type,
-                                             uplo,
-                                             storage);
+        // spec<T, I, J>::init_gebsr_rocalution(*this,
+        //                                      bsr_row_ptr,
+        //                                      bsr_col_ind,
+        //                                      bsr_val,
+        //                                      dirb,
+        //                                      Mb,
+        //                                      Nb,
+        //                                      nnzb,
+        //                                      row_block_dim,
+        //                                      col_block_dim,
+        //                                      base,
+        //                                      matrix_type,
+        //                                      uplo,
+        //                                      storage);
+        rocsparse_init_gebsr_rocalution(this->m_filename.c_str(),
+                                        bsr_row_ptr,
+                                        bsr_col_ind,
+                                        bsr_val,
+                                        Mb,
+                                        Nb,
+                                        nnzb,
+                                        row_block_dim,
+                                        col_block_dim,
+                                        base,
+                                        construction);
         break;
     }
     case rocsparse_matrix_file_rocsparseio:
     {
+        (void)construction;
         rocsparse_init_gebsr_rocsparseio(this->m_filename.c_str(),
                                          bsr_row_ptr,
                                          bsr_col_ind,

@@ -77,8 +77,923 @@ void testing_bsr2csr_bad_arg(const Arguments& arg)
 }
 
 template <typename T>
+static rocsparse_status check_bsr_generation(const Arguments& arg)
+{
+    std::cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
+
+    rocsparse_seedrand();
+    rocsparse_matrix_factory<T> matrix_factory(arg);
+
+    {
+        rocsparse_int Mb = (arg.M + arg.block_dim - 1) / arg.block_dim;
+        rocsparse_int Nb = (arg.N + arg.block_dim - 1) / arg.block_dim;
+        rocsparse_int block_dim = arg.block_dim;
+        rocsparse_index_base base = arg.baseA;
+        rocsparse_direction dir = arg.direction;
+        rocsparse_int nnzb;
+        std::vector<rocsparse_int> hbsr_row_ptr;
+        std::vector<rocsparse_int> hbsr_col_ind;
+        std::vector<T> hbsr_val;
+        matrix_factory.init_gebsr(hbsr_row_ptr,
+            hbsr_col_ind,
+            hbsr_val,
+            dir,
+            Mb,
+            Nb,
+            nnzb,
+            block_dim,
+            block_dim,
+            base,
+            bsr_construction_alg::convert_csr);
+    }
+
+    // Reference matrix
+    rocsparse_seedrand();
+    rocsparse_int Mb_ref = (arg.M + arg.block_dim - 1) / arg.block_dim;
+    rocsparse_int Nb_ref = (arg.N + arg.block_dim - 1) / arg.block_dim;
+    rocsparse_int block_dim_ref = arg.block_dim;
+    rocsparse_index_base base_ref = arg.baseA;
+    rocsparse_direction dir_ref = arg.direction;
+    rocsparse_int nnzb_ref;
+    std::vector<rocsparse_int> hbsr_row_ptr_ref;
+    std::vector<rocsparse_int> hbsr_col_ind_ref;
+    std::vector<T> hbsr_val_ref;
+    matrix_factory.init_gebsr(hbsr_row_ptr_ref,
+        hbsr_col_ind_ref,
+        hbsr_val_ref,
+        dir_ref,
+        Mb_ref,
+        Nb_ref,
+        nnzb_ref,
+        block_dim_ref,
+        block_dim_ref,
+        base_ref,
+        bsr_construction_alg::convert_csr);
+
+    // A matrix
+    // rocsparse_seedrand();
+    // rocsparse_int Mb_A = (arg.M + arg.block_dim - 1) / arg.block_dim;
+    // rocsparse_int Nb_A = (arg.N + arg.block_dim - 1) / arg.block_dim;
+    // rocsparse_int block_dim_A = arg.block_dim;
+    // rocsparse_index_base base_A = arg.baseA;
+    // rocsparse_direction dir_A = arg.direction;
+    // host_gebsr_matrix<T>   hA(dir_A, Mb_A, Nb_A, 0, block_dim_A, block_dim_A, base_A);
+    // matrix_factory.init_gebsr(hA, bsr_construction_alg::convert_csr);
+
+    // B matrix
+    rocsparse_seedrand();
+    rocsparse_int Mb_B = (arg.M + arg.block_dim - 1) / arg.block_dim;
+    rocsparse_int Nb_B = (arg.N + arg.block_dim - 1) / arg.block_dim;
+    rocsparse_int block_dim_B = arg.block_dim;
+    rocsparse_index_base base_B = arg.baseA;
+    rocsparse_direction dir_B = arg.direction;
+    host_gebsr_matrix<T>   hB(dir_B, Mb_B, Nb_B, 0, block_dim_B, block_dim_B, base_B);
+    matrix_factory.init_gebsr(hB,
+                                Mb_B,
+                                Nb_B,
+                                block_dim_B,
+                                block_dim_B,
+                                base_B,
+                                bsr_construction_alg::convert_csr);
+
+    std::cout << "dir_B: " << dir_B << " arg.direction: " << arg.direction << " hB.block_direction: " << hB.block_direction << " dir_ref: " << dir_ref << std::endl;
+
+    // C matrix
+    rocsparse_seedrand();
+    rocsparse_int Mb_C = (arg.M + arg.block_dim - 1) / arg.block_dim;
+    rocsparse_int Nb_C = (arg.N + arg.block_dim - 1) / arg.block_dim;
+    rocsparse_int block_dim_C = arg.block_dim;
+    rocsparse_index_base base_C = arg.baseA;
+    rocsparse_direction dir_C = arg.direction;
+    rocsparse_int nnzb_C = 0;
+    host_gebsr_matrix<T>   hC(dir_C, Mb_C, Nb_C, nnzb_C, block_dim_C, block_dim_C, base_C);
+    matrix_factory.init_gebsr(hC,
+                            dir_C,
+                            Mb_C,
+                            Nb_C,
+                            nnzb_C,
+                            block_dim_C,
+                            block_dim_C,
+                            base_C,
+                            bsr_construction_alg::convert_csr);
+
+    // D matrix
+    rocsparse_seedrand();
+    rocsparse_int Mb_D = (arg.M + arg.block_dim - 1) / arg.block_dim;
+    rocsparse_int Nb_D = (arg.N + arg.block_dim - 1) / arg.block_dim;
+    rocsparse_int block_dim_D = arg.block_dim;
+    rocsparse_index_base base_D = arg.baseA;
+    rocsparse_direction dir_D = arg.direction;
+    rocsparse_int nnzb_D;
+    std::vector<rocsparse_int> hbsr_row_ptr_D;
+    std::vector<rocsparse_int> hbsr_col_ind_D;
+    std::vector<T> hbsr_val_D;
+    matrix_factory.init_bsr(hbsr_row_ptr_D,
+                            hbsr_col_ind_D,
+                            hbsr_val_D,
+                            dir_D,
+                            Mb_D,
+                            Nb_D,
+                            nnzb_D,
+                            block_dim_D,
+                            base_D,
+                            bsr_construction_alg::convert_csr);
+
+    // E matrix
+    rocsparse_seedrand();
+    rocsparse_int Mb_E = (arg.M + arg.block_dim - 1) / arg.block_dim;
+    rocsparse_int Nb_E = (arg.N + arg.block_dim - 1) / arg.block_dim;
+    rocsparse_int block_dim_E = arg.block_dim;
+    rocsparse_index_base base_E = arg.baseA;
+    rocsparse_direction dir_E = arg.direction;
+    host_gebsr_matrix<T>   hE;
+    device_gebsr_matrix<T> dE;
+    matrix_factory.init_bsr(hE,
+                            dE,
+                            Mb_E,
+                            Nb_E,
+                            base_E,
+                            bsr_construction_alg::convert_csr);
+
+
+#define CHECK_MATCH(actual, ref)                                           \
+    do                                                                     \
+    {                                                                      \
+        if((actual) != (ref))                                              \
+        {                                                                  \
+            std::cout << #actual " does not match " #ref << std::endl;     \
+            return rocsparse_status_internal_error;                        \
+        }                                                                  \
+    } while(0)
+
+    // std::cout << "Mb_A: " << Mb_A << " Mb_ref: " << Mb_ref << std::endl;
+    // std::cout << "hA.row_block_dim: " << hA.row_block_dim << " hA.col_block_dim: " << hA.col_block_dim << " block_dim_ref: " << block_dim_ref << std::endl;
+
+    // Check A
+    // CHECK_MATCH(hA.mb, Mb_ref);
+    // CHECK_MATCH(hA.nb, Nb_ref);
+    // CHECK_MATCH(hA.row_block_dim, block_dim_ref);
+    // CHECK_MATCH(hA.col_block_dim, block_dim_ref);
+    // CHECK_MATCH(hA.base, base_ref);
+    // CHECK_MATCH(hA.block_direction, dir_ref);
+
+    // for(size_t i = 0; i < hbsr_row_ptr_ref.size(); i++)
+    // {
+    //     if(hbsr_row_ptr_ref[i] != hA.ptr[i])
+    //     {
+    //         std::cout << "Error at index " << i << " of A row pointer array" << std::endl;
+    //         return rocsparse_status_internal_error;
+    //     }
+    // }
+    // for(size_t i = 0; i < hbsr_col_ind_ref.size(); i++)
+    // {
+    //     if(hbsr_col_ind_ref[i] != hA.ind[i])
+    //     {
+    //         std::cout << "Error at index " << i << " of A column indices array" << std::endl;
+    //         return rocsparse_status_internal_error;
+    //     }
+    // }
+    // for(size_t i = 0; i < hbsr_val_ref.size(); i++)
+    // {
+    //     if(hbsr_val_ref[i] != hA.val[i])
+    //     {
+    //         std::cout << "Error at index " << i << " of A values array hbsr_val_ref[i]: " 
+    //                   << hbsr_val_ref[i] << " hA.val[i]: " << hA.val[i] << std::endl;
+    //         return rocsparse_status_internal_error;
+    //     }
+    // }
+
+
+    // Check B
+    CHECK_MATCH(Mb_B, Mb_ref);
+    CHECK_MATCH(Nb_B, Nb_ref);
+    CHECK_MATCH(block_dim_B, block_dim_ref);
+    CHECK_MATCH(base_B, base_ref);
+    CHECK_MATCH(dir_B, dir_ref);
+
+    CHECK_MATCH(hB.mb, Mb_ref);
+    CHECK_MATCH(hB.nb, Nb_ref);
+    CHECK_MATCH(hB.row_block_dim, block_dim_ref);
+    CHECK_MATCH(hB.col_block_dim, block_dim_ref);
+    CHECK_MATCH(hB.base, base_ref);
+    CHECK_MATCH(hB.block_direction, dir_ref);
+
+    for(size_t i = 0; i < hbsr_row_ptr_ref.size(); i++)
+    {
+        if(hbsr_row_ptr_ref[i] != hB.ptr[i])
+        {
+            std::cout << "Error at index " << i << " of B row pointer array" << std::endl;
+            return rocsparse_status_internal_error;
+        }
+    }
+    for(size_t i = 0; i < hbsr_col_ind_ref.size(); i++)
+    {
+        if(hbsr_col_ind_ref[i] != hB.ind[i])
+        {
+            std::cout << "Error at index " << i << " of B column indices array" << std::endl;
+            return rocsparse_status_internal_error;
+        }
+    }
+    for(size_t i = 0; i < hbsr_val_ref.size(); i++)
+    {
+        if(hbsr_val_ref[i] != hB.val[i])
+        {
+            std::cout << "Error at index " << i << " of B values array" << std::endl;
+            return rocsparse_status_internal_error;
+        }
+    }
+
+    // Check C
+    CHECK_MATCH(Mb_C, Mb_ref);
+    CHECK_MATCH(Nb_C, Nb_ref);
+    CHECK_MATCH(nnzb_C, nnzb_ref);
+    CHECK_MATCH(block_dim_C, block_dim_ref);
+    CHECK_MATCH(base_C, base_ref);
+    CHECK_MATCH(dir_C, dir_ref);
+
+    CHECK_MATCH(hC.mb, Mb_ref);
+    CHECK_MATCH(hC.nb, Nb_ref);
+    CHECK_MATCH(hC.nnzb, nnzb_ref);
+    CHECK_MATCH(hC.row_block_dim, block_dim_ref);
+    CHECK_MATCH(hC.col_block_dim, block_dim_ref);
+    CHECK_MATCH(hC.base, base_ref);
+    CHECK_MATCH(hC.block_direction, dir_ref);
+
+    for(size_t i = 0; i < hbsr_row_ptr_ref.size(); i++)
+    {
+        if(hbsr_row_ptr_ref[i] != hC.ptr[i])
+        {
+            std::cout << "Error at index " << i << " of C row pointer array" << std::endl;
+            return rocsparse_status_internal_error;
+        }
+    }
+    for(size_t i = 0; i < hbsr_col_ind_ref.size(); i++)
+    {
+        if(hbsr_col_ind_ref[i] != hC.ind[i])
+        {
+            std::cout << "Error at index " << i << " of C column indices array" << std::endl;
+            return rocsparse_status_internal_error;
+        }
+    }
+    for(size_t i = 0; i < hbsr_val_ref.size(); i++)
+    {
+        if(hbsr_val_ref[i] != hC.val[i])
+        {
+            std::cout << "Error at index " << i << " of C values array" << std::endl;
+            return rocsparse_status_internal_error;
+        }
+    }
+
+    // Check D
+    CHECK_MATCH(Mb_D, Mb_ref);
+    CHECK_MATCH(Nb_D, Nb_ref);
+    CHECK_MATCH(nnzb_D, nnzb_ref);
+    CHECK_MATCH(block_dim_D, block_dim_ref);
+    CHECK_MATCH(base_D, base_ref);
+    CHECK_MATCH(dir_D, dir_ref);
+
+    for(size_t i = 0; i < hbsr_row_ptr_ref.size(); i++)
+    {
+        if(hbsr_row_ptr_ref[i] != hbsr_row_ptr_D[i])
+        {
+            std::cout << "Error at index " << i << " of D row pointer array" << std::endl;
+            return rocsparse_status_internal_error;
+        }
+    }
+    for(size_t i = 0; i < hbsr_col_ind_ref.size(); i++)
+    {
+        if(hbsr_col_ind_ref[i] != hbsr_col_ind_D[i])
+        {
+            std::cout << "Error at index " << i << " of D column indices array" << std::endl;
+            return rocsparse_status_internal_error;
+        }
+    }
+    for(size_t i = 0; i < hbsr_val_ref.size(); i++)
+    {
+        if(hbsr_val_ref[i] != hbsr_val_D[i])
+        {
+            std::cout << "Error at index " << i << " of D values array" << std::endl;
+            return rocsparse_status_internal_error;
+        }
+    }
+
+    // Check E
+    CHECK_MATCH(Mb_E, Mb_ref);
+    CHECK_MATCH(Nb_E, Nb_ref);
+    CHECK_MATCH(block_dim_E, block_dim_ref);
+    CHECK_MATCH(base_E, base_ref);
+    CHECK_MATCH(dir_E, dir_ref);
+
+    CHECK_MATCH(hE.mb, Mb_ref);
+    CHECK_MATCH(hE.nb, Nb_ref);
+    CHECK_MATCH(hE.row_block_dim, block_dim_ref);
+    CHECK_MATCH(hE.col_block_dim, block_dim_ref);
+    CHECK_MATCH(hE.base, base_ref);
+    CHECK_MATCH(hE.block_direction, dir_ref);
+
+    for(size_t i = 0; i < hbsr_row_ptr_ref.size(); i++)
+    {
+        if(hbsr_row_ptr_ref[i] != hE.ptr[i])
+        {
+            std::cout << "Error at index " << i << " of E row pointer array" << std::endl;
+            return rocsparse_status_internal_error;
+        }
+    }
+    for(size_t i = 0; i < hbsr_col_ind_ref.size(); i++)
+    {
+        if(hbsr_col_ind_ref[i] != hE.ind[i])
+        {
+            std::cout << "Error at index " << i << " of E column indices array" << std::endl;
+            return rocsparse_status_internal_error;
+        }
+    }
+    for(size_t i = 0; i < hbsr_val_ref.size(); i++)
+    {
+        if(hbsr_val_ref[i] != hE.val[i])
+        {
+            std::cout << "Error at index " << i << " of E values array" << std::endl;
+            return rocsparse_status_internal_error;
+        }
+    }
+
+    std::cout << "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB" << std::endl;
+
+    return rocsparse_status_success;
+
+    // {
+    //     std::cout << "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" << std::endl;
+    //     rocsparse_seedrand();
+    //     rocsparse_matrix_factory<T> matrix_factory(arg);
+
+    //     rocsparse_int Mb = (arg.M + arg.block_dim - 1) / arg.block_dim;
+    //     rocsparse_int Nb = (arg.N + arg.block_dim - 1) / arg.block_dim;
+    //     rocsparse_int block_dim = arg.block_dim;
+    //     rocsparse_index_base base = arg.baseA;
+    //     rocsparse_direction dir = arg.direction;
+
+    //     rocsparse_int nnzb;
+    //     std::vector<rocsparse_int> hbsr_row_ptr;
+    //     std::vector<rocsparse_int> hbsr_col_ind;
+    //     std::vector<T> hbsr_val;
+    //     matrix_factory.init_gebsr(hbsr_row_ptr,
+    //         hbsr_col_ind,
+    //         hbsr_val,
+    //         dir,
+    //         Mb,
+    //         Nb,
+    //         nnzb,
+    //         block_dim,
+    //         block_dim,
+    //         base,
+    //         bsr_construction_alg::convert_csr);
+
+    //     std::cout << "BSR A" << std::endl;
+    //     std::vector<T> hdense(Mb * block_dim * Nb * block_dim, 0);
+    //     for(int i = 0; i < Mb; i++)
+    //     {
+    //         int start = hbsr_row_ptr[i] - base;
+    //         int end = hbsr_row_ptr[i + 1] - base;
+
+    //         for(int j = start; j < end; j++)
+    //         {
+    //             int bcol = hbsr_col_ind[j] - base;
+
+    //             for(int r = 0; r < block_dim; r++)
+    //             {
+    //                 for(int c = 0; c < block_dim; c++)
+    //                 {
+    //                     int row = block_dim * i + r;
+    //                     int col = block_dim * bcol + c;
+    //                     hdense[Nb * block_dim * row + col] = hbsr_val[block_dim * block_dim * j + block_dim * r + c];
+    //                 }
+    //             }
+    //         }
+    //     }
+    //     std::cout << "" << std::endl;
+
+    //     std::cout << "hdense" << std::endl;
+    //     for(int row = 0; row < block_dim * Mb; row++)
+    //     {
+    //         for(int col = 0; col < block_dim * Mb; col++)
+    //         {
+    //             std::cout << hdense[Nb * block_dim * row + col] << " ";
+    //         }
+    //         std::cout << "" << std::endl;
+    //     }
+    //     std::cout << "" << std::endl;
+
+    //     std::cout << "hbsr_row_ptr" << std::endl;
+    //     for(size_t i = 0; i < hbsr_row_ptr.size(); i++)
+    //     {
+    //         std::cout << hbsr_row_ptr[i] << " ";
+    //     }
+    //     std::cout << "" << std::endl;
+    //     std::cout << "hbsr_col_ind" << std::endl;
+    //     for(size_t i = 0; i < hbsr_col_ind.size(); i++)
+    //     {
+    //         std::cout << hbsr_col_ind[i] << " ";
+    //     }
+    //     std::cout << "" << std::endl;
+    //     std::cout << "hbsr_val" << std::endl;
+    //     for(size_t i = 0; i < hbsr_val.size(); i++)
+    //     {
+    //         std::cout << hbsr_val[i] << " ";
+    //     }
+    //     std::cout << "" << std::endl;
+    // }
+
+
+
+
+
+
+    // {
+    //     std::cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
+    //     rocsparse_seedrand();
+    //     rocsparse_matrix_factory<T> matrix_factory(arg);
+
+    //     rocsparse_int Mb = (arg.M + arg.block_dim - 1) / arg.block_dim;
+    //     rocsparse_int Nb = (arg.N + arg.block_dim - 1) / arg.block_dim;
+    //     rocsparse_int block_dim = arg.block_dim;
+    //     rocsparse_index_base base = arg.baseA;
+    //     rocsparse_direction dir = arg.direction;
+
+    //     rocsparse_int nnzb;
+    //     std::vector<rocsparse_int> hbsr_row_ptr;
+    //     std::vector<rocsparse_int> hbsr_col_ind;
+    //     std::vector<T> hbsr_val;
+    //     matrix_factory.init_gebsr(hbsr_row_ptr,
+    //         hbsr_col_ind,
+    //         hbsr_val,
+    //         dir,
+    //         Mb,
+    //         Nb,
+    //         nnzb,
+    //         block_dim,
+    //         block_dim,
+    //         base,
+    //         bsr_construction_alg::convert_csr);
+
+    //     std::cout << "BSR A" << std::endl;
+    //     std::vector<T> hdense(Mb * block_dim * Nb * block_dim, 0);
+    //     for(int i = 0; i < Mb; i++)
+    //     {
+    //         int start = hbsr_row_ptr[i] - base;
+    //         int end = hbsr_row_ptr[i + 1] - base;
+
+    //         for(int j = start; j < end; j++)
+    //         {
+    //             int bcol = hbsr_col_ind[j] - base;
+
+    //             for(int r = 0; r < block_dim; r++)
+    //             {
+    //                 for(int c = 0; c < block_dim; c++)
+    //                 {
+    //                     int row = block_dim * i + r;
+    //                     int col = block_dim * bcol + c;
+    //                     hdense[Nb * block_dim * row + col] = hbsr_val[block_dim * block_dim * j + block_dim * r + c];
+    //                 }
+    //             }
+    //         }
+    //     }
+    //     std::cout << "" << std::endl;
+
+    //     std::cout << "hdense" << std::endl;
+    //     for(int row = 0; row < block_dim * Mb; row++)
+    //     {
+    //         for(int col = 0; col < block_dim * Mb; col++)
+    //         {
+    //             std::cout << hdense[Nb * block_dim * row + col] << " ";
+    //         }
+    //         std::cout << "" << std::endl;
+    //     }
+    //     std::cout << "" << std::endl;
+
+    //     std::cout << "hbsr_row_ptr" << std::endl;
+    //     for(size_t i = 0; i < hbsr_row_ptr.size(); i++)
+    //     {
+    //         std::cout << hbsr_row_ptr[i] << " ";
+    //     }
+    //     std::cout << "" << std::endl;
+    //     std::cout << "hbsr_col_ind" << std::endl;
+    //     for(size_t i = 0; i < hbsr_col_ind.size(); i++)
+    //     {
+    //         std::cout << hbsr_col_ind[i] << " ";
+    //     }
+    //     std::cout << "" << std::endl;
+    //     std::cout << "hbsr_val" << std::endl;
+    //     for(size_t i = 0; i < hbsr_val.size(); i++)
+    //     {
+    //         std::cout << hbsr_val[i] << " ";
+    //     }
+    //     std::cout << "" << std::endl;
+    // }
+
+    // {
+    //     std::cout << "BBBBBBBBBBBBBBBBBBBBBBBBBBBBB" << std::endl;
+    //     rocsparse_seedrand();
+    //     rocsparse_matrix_factory<T> matrix_factory(arg);
+
+    //     rocsparse_int Mb = (arg.M + arg.block_dim - 1) / arg.block_dim;
+    //     rocsparse_int Nb = (arg.N + arg.block_dim - 1) / arg.block_dim;
+    //     rocsparse_int block_dim = arg.block_dim;
+    //     rocsparse_index_base base = arg.baseA;
+    //     rocsparse_direction dir = arg.direction;
+
+    //     host_gebsr_matrix<T>   hA(dir, Mb, Nb, 0, block_dim, block_dim, base);
+    //     matrix_factory.init_gebsr(hA, bsr_construction_alg::convert_csr);
+
+    //     std::cout << "hA.mb: " << hA.mb << " hA.nb: " << hA.nb << " hA.nnzb: " << hA.nnzb << std::endl;
+    //     std::cout << "hA.row_block_dim: " << hA.row_block_dim << " hA.col_block_dim: " << hA.col_block_dim << std::endl;
+    //     std::cout << "hA.ptr.size(): " << hA.ptr.size() << std::endl;
+    //     std::cout << "hA.ind.size(): " << hA.ind.size() << std::endl;
+    //     std::cout << "hA.val.size(): " << hA.val.size() << std::endl;
+
+    //     std::cout << "BSR B" << std::endl;
+
+    //     std::vector<T> hdense(hA.mb * block_dim * hA.nb * block_dim, 0);
+    //     for(int i = 0; i < hA.mb; i++)
+    //     {
+    //         int start = hA.ptr[i] - base;
+    //         int end = hA.ptr[i + 1] - base;
+
+    //         for(int j = start; j < end; j++)
+    //         {
+    //             int bcol = hA.ind[j] - base;
+
+    //             for(int r = 0; r < block_dim; r++)
+    //             {
+    //                 for(int c = 0; c < block_dim; c++)
+    //                 {
+    //                     int row = block_dim * i + r;
+    //                     int col = block_dim * bcol + c;
+
+    //                     hdense[Nb * block_dim * row + col] = hA.val[block_dim * block_dim * j + block_dim * r + c];
+    //                 }
+    //             }
+    //         }
+    //     }
+
+    //     std::cout << "hdense" << std::endl;
+    //     for(int row = 0; row < block_dim * hA.mb; row++)
+    //     {
+    //         for(int col = 0; col < block_dim * hA.mb; col++)
+    //         {
+    //             std::cout << hdense[hA.nb * block_dim * row + col] << " ";
+    //         }
+    //         std::cout << "" << std::endl;
+    //     }
+    //     std::cout << "" << std::endl;
+
+    //     std::cout << "hA.ptr" << std::endl;
+    //     for(size_t i = 0; i < hA.ptr.size(); i++)
+    //     {
+    //         std::cout << hA.ptr[i] << " ";
+    //     }
+    //     std::cout << "" << std::endl;
+    //     std::cout << "hA.ind" << std::endl;
+    //     for(size_t i = 0; i < hA.ind.size(); i++)
+    //     {
+    //         std::cout << hA.ind[i] << " ";
+    //     }
+    //     std::cout << "" << std::endl;
+    //     std::cout << "hA.val" << std::endl;
+    //     for(size_t i = 0; i < hA.val.size(); i++)
+    //     {
+    //         std::cout << hA.val[i] << " ";
+    //     }
+    //     std::cout << "" << std::endl;
+    // }
+
+    // {
+    //     std::cout << "CCCCCCCCCCCCCCCCCCCCCCCCCCCCC" << std::endl;
+    //     rocsparse_seedrand();
+    //     rocsparse_matrix_factory<T> matrix_factory(arg);
+
+    //     rocsparse_int Mb = (arg.M + arg.block_dim - 1) / arg.block_dim;
+    //     rocsparse_int Nb = (arg.N + arg.block_dim - 1) / arg.block_dim;
+    //     rocsparse_int block_dim = arg.block_dim;
+    //     rocsparse_index_base base = arg.baseA;
+    //     rocsparse_direction dir = arg.direction;
+
+    //     std::cout << "1" << std::endl;
+    //     host_gebsr_matrix<T>   hA(dir, Mb, Nb, 0, block_dim, block_dim, base);
+    //     std::cout << "2" << std::endl;
+    //     matrix_factory.init_gebsr(hA,
+    //                                 Mb,
+    //                                 Nb,
+    //                                 block_dim,
+    //                                 block_dim,
+    //                                 base,
+    //                                 bsr_construction_alg::convert_csr);
+
+    //     std::cout << "BSR C" << std::endl;
+    //     std::vector<T> hdense(Mb * block_dim * Nb * block_dim, 0);
+    //     for(int i = 0; i < Mb; i++)
+    //     {
+    //         int start = hA.ptr[i] - base;
+    //         int end = hA.ptr[i + 1] - base;
+
+    //         for(int j = start; j < end; j++)
+    //         {
+    //             int bcol = hA.ind[j] - base;
+
+    //             for(int r = 0; r < block_dim; r++)
+    //             {
+    //                 for(int c = 0; c < block_dim; c++)
+    //                 {
+    //                     int row = block_dim * i + r;
+    //                     int col = block_dim * bcol + c;
+    //                     hdense[Nb * block_dim * row + col] = hA.val[block_dim * block_dim * j + block_dim * r + c];
+    //                 }
+    //             }
+    //         }
+    //     }
+    //     std::cout << "" << std::endl;
+
+    //     std::cout << "hdense" << std::endl;
+    //     for(int row = 0; row < block_dim * Mb; row++)
+    //     {
+    //         for(int col = 0; col < block_dim * Mb; col++)
+    //         {
+    //             std::cout << hdense[Nb * block_dim * row + col] << " ";
+    //         }
+    //         std::cout << "" << std::endl;
+    //     }
+    //     std::cout << "" << std::endl;
+
+    //     std::cout << "hA.ptr" << std::endl;
+    //     for(size_t i = 0; i < hA.ptr.size(); i++)
+    //     {
+    //         std::cout << hA.ptr[i] << " ";
+    //     }
+    //     std::cout << "" << std::endl;
+    //     std::cout << "hA.ind" << std::endl;
+    //     for(size_t i = 0; i < hA.ind.size(); i++)
+    //     {
+    //         std::cout << hA.ind[i] << " ";
+    //     }
+    //     std::cout << "" << std::endl;
+    //     std::cout << "hA.val" << std::endl;
+    //     for(size_t i = 0; i < hA.val.size(); i++)
+    //     {
+    //         std::cout << hA.val[i] << " ";
+    //     }
+    //     std::cout << "" << std::endl;
+    // }
+
+    // {
+    //     std::cout << "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD" << std::endl;
+    //     rocsparse_seedrand();
+    //     rocsparse_matrix_factory<T> matrix_factory(arg);
+
+    //     rocsparse_int Mb = (arg.M + arg.block_dim - 1) / arg.block_dim;
+    //     rocsparse_int Nb = (arg.N + arg.block_dim - 1) / arg.block_dim;
+    //     rocsparse_int block_dim = arg.block_dim;
+    //     rocsparse_index_base base = arg.baseA;
+    //     rocsparse_direction dir = arg.direction;
+
+    //     rocsparse_int nnzb = 0;
+    //     host_gebsr_matrix<T>   hA(dir, Mb, Nb, nnzb, block_dim, block_dim, base);
+        
+    //     matrix_factory.init_gebsr(hA,
+    //                             dir,
+    //                             Mb,
+    //                             Nb,
+    //                             nnzb,
+    //                             block_dim,
+    //                             block_dim,
+    //                             base,
+    //                             bsr_construction_alg::convert_csr);
+
+    //     std::cout << "BSR D" << std::endl;
+    //     std::vector<T> hdense(Mb * block_dim * Nb * block_dim, 0);
+    //     for(int i = 0; i < Mb; i++)
+    //     {
+    //         int start = hA.ptr[i] - base;
+    //         int end = hA.ptr[i + 1] - base;
+
+    //         for(int j = start; j < end; j++)
+    //         {
+    //             int bcol = hA.ind[j] - base;
+
+    //             for(int r = 0; r < block_dim; r++)
+    //             {
+    //                 for(int c = 0; c < block_dim; c++)
+    //                 {
+    //                     int row = block_dim * i + r;
+    //                     int col = block_dim * bcol + c;
+    //                     hdense[Nb * block_dim * row + col] = hA.val[block_dim * block_dim * j + block_dim * r + c];
+    //                 }
+    //             }
+    //         }
+    //     }
+    //     std::cout << "" << std::endl;
+
+    //     std::cout << "hdense" << std::endl;
+    //     for(int row = 0; row < block_dim * Mb; row++)
+    //     {
+    //         for(int col = 0; col < block_dim * Mb; col++)
+    //         {
+    //             std::cout << hdense[Nb * block_dim * row + col] << " ";
+    //         }
+    //         std::cout << "" << std::endl;
+    //     }
+    //     std::cout << "" << std::endl;
+
+    //     std::cout << "hA.ptr" << std::endl;
+    //     for(size_t i = 0; i < hA.ptr.size(); i++)
+    //     {
+    //         std::cout << hA.ptr[i] << " ";
+    //     }
+    //     std::cout << "" << std::endl;
+    //     std::cout << "hA.ind" << std::endl;
+    //     for(size_t i = 0; i < hA.ind.size(); i++)
+    //     {
+    //         std::cout << hA.ind[i] << " ";
+    //     }
+    //     std::cout << "" << std::endl;
+    //     std::cout << "hA.val" << std::endl;
+    //     for(size_t i = 0; i < hA.val.size(); i++)
+    //     {
+    //         std::cout << hA.val[i] << " ";
+    //     }
+    //     std::cout << "" << std::endl;
+    // }
+
+    // {
+    //     std::cout << "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE" << std::endl;
+    //     rocsparse_seedrand();
+    //     rocsparse_matrix_factory<T> matrix_factory(arg);
+
+    //     rocsparse_int Mb = (arg.M + arg.block_dim - 1) / arg.block_dim;
+    //     rocsparse_int Nb = (arg.N + arg.block_dim - 1) / arg.block_dim;
+    //     rocsparse_int block_dim = arg.block_dim;
+    //     rocsparse_index_base base = arg.baseA;
+    //     rocsparse_direction dir = arg.direction;
+
+    //     rocsparse_int nnzb;
+    //     std::vector<rocsparse_int> hbsr_row_ptr;
+    //     std::vector<rocsparse_int> hbsr_col_ind;
+    //     std::vector<T> hbsr_val;
+    //     matrix_factory.init_bsr(hbsr_row_ptr,
+    //                             hbsr_col_ind,
+    //                             hbsr_val,
+    //                             dir,
+    //                             Mb,
+    //                             Nb,
+    //                             nnzb,
+    //                             block_dim,
+    //                             base,
+    //                             bsr_construction_alg::convert_csr);
+
+    //     std::cout << "BSR E" << std::endl;
+    //     std::vector<T> hdense(Mb * block_dim * Nb * block_dim, 0);
+    //     for(int i = 0; i < Mb; i++)
+    //     {
+    //         int start = hbsr_row_ptr[i] - base;
+    //         int end = hbsr_row_ptr[i + 1] - base;
+
+    //         for(int j = start; j < end; j++)
+    //         {
+    //             int bcol = hbsr_col_ind[j] - base;
+
+    //             for(int r = 0; r < block_dim; r++)
+    //             {
+    //                 for(int c = 0; c < block_dim; c++)
+    //                 {
+    //                     int row = block_dim * i + r;
+    //                     int col = block_dim * bcol + c;
+    //                     hdense[Nb * block_dim * row + col] = hbsr_val[block_dim * block_dim * j + block_dim * r + c];
+    //                 }
+    //             }
+    //         }
+    //     }
+    //     std::cout << "" << std::endl;
+
+    //     std::cout << "hdense" << std::endl;
+    //     for(int row = 0; row < block_dim * Mb; row++)
+    //     {
+    //         for(int col = 0; col < block_dim * Mb; col++)
+    //         {
+    //             std::cout << hdense[Nb * block_dim * row + col] << " ";
+    //         }
+    //         std::cout << "" << std::endl;
+    //     }
+    //     std::cout << "" << std::endl;
+
+    //     std::cout << "hbsr_row_ptr" << std::endl;
+    //     for(size_t i = 0; i < hbsr_row_ptr.size(); i++)
+    //     {
+    //         std::cout << hbsr_row_ptr[i] << " ";
+    //     }
+    //     std::cout << "" << std::endl;
+    //     std::cout << "hbsr_col_ind" << std::endl;
+    //     for(size_t i = 0; i < hbsr_col_ind.size(); i++)
+    //     {
+    //         std::cout << hbsr_col_ind[i] << " ";
+    //     }
+    //     std::cout << "" << std::endl;
+    //     std::cout << "hbsr_val" << std::endl;
+    //     for(size_t i = 0; i < hbsr_val.size(); i++)
+    //     {
+    //         std::cout << hbsr_val[i] << " ";
+    //     }
+    //     std::cout << "" << std::endl;
+    // }
+
+    // {
+    //     std::cout << "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF" << std::endl;
+    //     rocsparse_seedrand();
+    //     rocsparse_matrix_factory<T> matrix_factory(arg);
+
+    //     rocsparse_int Mb = (arg.M + arg.block_dim - 1) / arg.block_dim;
+    //     rocsparse_int Nb = (arg.N + arg.block_dim - 1) / arg.block_dim;
+    //     rocsparse_int block_dim = arg.block_dim;
+    //     rocsparse_index_base base = arg.baseA;
+    //     rocsparse_direction dir = arg.direction;
+
+    //     host_gebsr_matrix<T>   hA;
+    //     device_gebsr_matrix<T> dA;
+
+    //     std::cout << "Mb: " << Mb << " Nb: " << Nb << std::endl;
+        
+    //     matrix_factory.init_bsr(hA,
+    //                             dA,
+    //                             Mb,
+    //                             Nb,
+    //                             base,
+    //                             bsr_construction_alg::convert_csr);
+
+    //     std::cout << "Mb: " << Mb << " Nb: " << Nb << std::endl;
+
+    //     std::cout << "BSR F" << std::endl;
+    //     std::vector<T> hdense(Mb * block_dim * Nb * block_dim, 0);
+    //     for(int i = 0; i < Mb; i++)
+    //     {
+    //         int start = hA.ptr[i] - base;
+    //         int end = hA.ptr[i + 1] - base;
+
+    //         for(int j = start; j < end; j++)
+    //         {
+    //             int bcol = hA.ind[j] - base;
+
+    //             for(int r = 0; r < block_dim; r++)
+    //             {
+    //                 for(int c = 0; c < block_dim; c++)
+    //                 {
+    //                     int row = block_dim * i + r;
+    //                     int col = block_dim * bcol + c;
+    //                     hdense[Nb * block_dim * row + col] = hA.val[block_dim * block_dim * j + block_dim * r + c];
+    //                 }
+    //             }
+    //         }
+    //     }
+    //     std::cout << "" << std::endl;
+
+    //     std::cout << "hdense" << std::endl;
+    //     for(int row = 0; row < block_dim * Mb; row++)
+    //     {
+    //         for(int col = 0; col < block_dim * Mb; col++)
+    //         {
+    //             std::cout << hdense[Nb * block_dim * row + col] << " ";
+    //         }
+    //         std::cout << "" << std::endl;
+    //     }
+    //     std::cout << "" << std::endl;
+
+    //     std::cout << "hA.ptr" << std::endl;
+    //     for(size_t i = 0; i < hA.ptr.size(); i++)
+    //     {
+    //         std::cout << hA.ptr[i] << " ";
+    //     }
+    //     std::cout << "" << std::endl;
+    //     std::cout << "hA.ind" << std::endl;
+    //     for(size_t i = 0; i < hA.ind.size(); i++)
+    //     {
+    //         std::cout << hA.ind[i] << " ";
+    //     }
+    //     std::cout << "" << std::endl;
+    //     std::cout << "hA.val" << std::endl;
+    //     for(size_t i = 0; i < hA.val.size(); i++)
+    //     {
+    //         std::cout << hA.val[i] << " ";
+    //     }
+    //     std::cout << "" << std::endl;
+    // }
+}
+
+
+
+template <typename T>
 void testing_bsr2csr(const Arguments& arg)
 {
+    CHECK_ROCSPARSE_ERROR(check_bsr_generation<T>(arg));
+
+
+
+
+
     rocsparse_int        M         = arg.M;
     rocsparse_int        N         = arg.N;
     rocsparse_index_base bsr_base  = arg.baseA;
@@ -103,7 +1018,7 @@ void testing_bsr2csr(const Arguments& arg)
     host_gebsr_matrix<T>   hA;
     device_gebsr_matrix<T> dA;
 
-    matrix_factory.init_bsr(hA, dA, Mb, Nb, bsr_base);
+    matrix_factory.init_bsr(hA, dA, Mb, Nb, bsr_base, bsr_construction_alg::convert_csr);
 
     M = dA.mb * dA.row_block_dim;
     N = dA.nb * dA.col_block_dim;

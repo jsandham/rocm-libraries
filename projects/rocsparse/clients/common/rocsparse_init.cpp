@@ -26,8 +26,25 @@
 #include "rocsparse_import.hpp"
 #include "rocsparse_importer_impls.hpp"
 #include "rocsparse_matrix.hpp"
+#include "rocsparse_matrix_csx.hpp"
+#include "rocsparse_matrix_gebsx.hpp"
+#include "rocsparse_matrix_utils.hpp"
 
 #include "rocsparse_clients_routine_trace.hpp"
+
+namespace
+{
+    template <typename I>
+    void assign_vector_from_rocsparse_int(std::vector<I>&                      dest,
+                                          const std::vector<rocsparse_int>& src)
+    {
+        dest.resize(src.size());
+        for(size_t i = 0; i < src.size(); ++i)
+        {
+            dest[i] = static_cast<I>(src[i]);
+        }
+    }
+}
 
 /* ==================================================================================== */
 /*! \brief  matrix/vector initialization: */
@@ -295,6 +312,8 @@ void rocsparse_init_coo_matrix(std::vector<I>&      row_ind,
                                bool                 to_int)
 {
     ROCSPARSE_CLIENTS_ROUTINE_TRACE;
+
+    std::cout << "rocsparse_init_coo_matrix M: " << M << " N: " << N << " nnz: " << nnz << " base: " << base << " full_rank: " << full_rank << std::endl;
 
     if(nnz == 0)
     {
@@ -1157,19 +1176,78 @@ void rocsparse_init_gebsr_rocalution(const char*          filename,
                                      I&                   nnzb,
                                      J                    row_block_dim,
                                      J                    col_block_dim,
-                                     rocsparse_index_base base)
+                                     rocsparse_index_base base,
+                                     bsr_construction_alg construction)
 {
     ROCSPARSE_CLIENTS_ROUTINE_TRACE;
 
-    // Temporarily the file contains a CSR matrix.
-    rocsparse_init_csr_rocalution(filename, row_ptr, col_ind, val, Mb, Nb, nnzb, base);
+    std::cout << "rocsparse_init_gebsr_rocalution" << std::endl;
+    std::cout << "Mb: " << Mb << " Nb: " << Nb << " nnzb: " << nnzb 
+              << " row_block_dim: " << row_block_dim << " col_block_dim: " << col_block_dim << " base: " << base << std::endl;
 
-    // Then temporarily skip the values.
-    const size_t nvalues = size_t(nnzb) * row_block_dim * col_block_dim;
-    val.resize(nvalues);
-    for(size_t i = 0; i < nvalues; ++i)
+    switch(construction)
     {
-        val[i] = random_cached_generator<T>();
+    case bsr_construction_alg::expand_csr:
+    {
+        // Temporarily the file contains a CSR matrix.
+        rocsparse_init_csr_rocalution(filename, row_ptr, col_ind, val, Mb, Nb, nnzb, base);
+
+        const size_t nvalues = size_t(nnzb) * row_block_dim * col_block_dim;
+        val.resize(nvalues);
+        for(size_t i = 0; i < nvalues; ++i)
+        {
+            val[i] = random_cached_generator<T>();
+        }
+        break;
+    }
+    case bsr_construction_alg::convert_csr:
+    {
+        // Read the CSR matrix from the rocALUTION file directly into (I, J, T).
+        J              M = 0, N = 0;
+        I              nnz_csr = 0;
+        std::vector<I> csr_row_ptr;
+        std::vector<J> csr_col_ind;
+        std::vector<T> csr_val;
+        rocsparse_init_csr_rocalution(
+            filename, csr_row_ptr, csr_col_ind, csr_val, M, N, nnz_csr, base);
+
+        if(M <= 0 || N <= 0 || row_block_dim <= 0 || col_block_dim <= 0)
+        {
+            row_ptr.clear();
+            col_ind.clear();
+            val.clear();
+            nnzb = 0;
+            Mb   = 0;
+            Nb   = 0;
+            break;
+        }
+
+        // Derive the GEBSR block-grid dimensions from the CSR dimensions, the
+        // same way rocsparse_matrix_utils::convert would have.
+        Mb = (M + row_block_dim - 1) / row_block_dim;
+        Nb = (N + col_block_dim - 1) / col_block_dim;
+
+        // Convert CSR -> GEBSR entirely on the host, templated on (T, I, J),
+        // so we do not depend on rocsparse conversion kernels (which do not
+        // cover every (I, J, T) combination the test suite needs).
+        host_csr_to_gebsr<T, I, J>(rocsparse_direction_row,
+                                   M,
+                                   N,
+                                   nnz_csr,
+                                   csr_val,
+                                   csr_row_ptr,
+                                   csr_col_ind,
+                                   row_block_dim,
+                                   col_block_dim,
+                                   base,
+                                   val,
+                                   row_ptr,
+                                   col_ind,
+                                   base);
+
+        nnzb = static_cast<I>(col_ind.size());
+        break;
+    }
     }
 }
 
@@ -1421,31 +1499,102 @@ void rocsparse_init_gebsr_random(std::vector<I>&            row_ptr,
                                  I&                         nnzb,
                                  J                          row_block_dim,
                                  J                          col_block_dim,
+                                 rocsparse_direction        block_dir,
                                  rocsparse_index_base       base,
                                  rocsparse_matrix_init_kind init_kind,
                                  bool                       full_rank,
-                                 bool                       to_int)
+                                 bool                       to_int,
+                                 bsr_construction_alg     construction)
 {
     ROCSPARSE_CLIENTS_ROUTINE_TRACE;
 
-    rocsparse_init_csr_random(
-        row_ptr, col_ind, val, Mb, Nb, nnzb, base, init_kind, full_rank, to_int);
+    switch(construction)
+    {
+    case bsr_construction_alg::expand_csr:
+    {
+        rocsparse_init_csr_random(
+            row_ptr, col_ind, val, Mb, Nb, nnzb, base, init_kind, full_rank, to_int);
 
-    const size_t nvalues = size_t(nnzb) * row_block_dim * col_block_dim;
-    val.resize(nvalues);
-    if(to_int)
-    {
-        for(size_t i = 0; i < nvalues; ++i)
+        const size_t nvalues = size_t(nnzb) * row_block_dim * col_block_dim;
+        val.resize(nvalues);
+        if(to_int)
         {
-            val[i] = random_cached_generator_exact<T>();
+            for(size_t i = 0; i < nvalues; ++i)
+            {
+                val[i] = random_cached_generator_exact<T>();
+            }
         }
+        else
+        {
+            for(size_t i = 0; i < nvalues; ++i)
+            {
+                val[i] = random_cached_generator<T>();
+            }
+        }
+        break;
     }
-    else
+    case bsr_construction_alg::convert_csr:
     {
-        for(size_t i = 0; i < nvalues; ++i)
+        const J mb_i = Mb;
+        const J nb_i = Nb;
+        const J rbd  = row_block_dim;
+        const J cbd  = col_block_dim;
+        const J M    = mb_i * rbd;
+        const J N    = nb_i * cbd;
+
+        if(mb_i <= 0 || nb_i <= 0 || rbd <= 0 || cbd <= 0)
         {
-            val[i] = random_cached_generator<T>();
+            row_ptr.clear();
+            col_ind.clear();
+            val.clear();
+            nnzb = 0;
+            break;
         }
+
+        std::cout << "convert M: " << M << " N: " << N << " base: " << base
+                  << " init_kind: " << init_kind << " full_rank: " << full_rank
+                  << " to_int: " << to_int << std::endl;
+
+        // Generate a random CSR matrix on the host using the caller's
+        // (I, J, T) index / value types directly.
+        std::vector<I> csr_row_ptr;
+        std::vector<J> csr_col_ind;
+        std::vector<T> csr_val;
+        I              nnz_csr = 0;
+        rocsparse_init_csr_random(csr_row_ptr,
+                                  csr_col_ind,
+                                  csr_val,
+                                  M,
+                                  N,
+                                  nnz_csr,
+                                  base,
+                                  init_kind,
+                                  full_rank,
+                                  to_int);
+
+        std::cout << "convert M: " << M << " N: " << N << " nnz_csr: " << nnz_csr << std::endl;
+
+        // Convert CSR -> GEBSR entirely on the host, templated on (T, I, J),
+        // so we do not depend on rocsparse conversion kernels (which do not
+        // cover every (I, J, T) combination the test suite needs).
+        host_csr_to_gebsr<T, I, J>(block_dir,
+                                   M,
+                                   N,
+                                   nnz_csr,
+                                   csr_val,
+                                   csr_row_ptr,
+                                   csr_col_ind,
+                                   rbd,
+                                   cbd,
+                                   base,
+                                   val,
+                                   row_ptr,
+                                   col_ind,
+                                   base);
+
+        nnzb = static_cast<I>(col_ind.size());
+        break;
+    }
     }
 }
 
@@ -2100,16 +2249,17 @@ void rocsparse_init_gebsr_pentadiagonal(std::vector<I>&      row_ptr,
                                                                   JTYPE               col_block_dim, \
                                                                   rocsparse_index_base base);        \
     template void rocsparse_init_gebsr_rocalution<ITYPE, JTYPE, TTYPE>(                              \
-        const char*          filename,                                                               \
-        std::vector<ITYPE>&  row_ptr,                                                                \
-        std::vector<JTYPE>&  col_ind,                                                                \
-        std::vector<TTYPE>&  val,                                                                    \
-        JTYPE&               Mb,                                                                     \
-        JTYPE&               Nb,                                                                     \
-        ITYPE&               nnzb,                                                                   \
-        JTYPE                row_block_dim,                                                          \
-        JTYPE                col_block_dim,                                                          \
-        rocsparse_index_base base);                                                                  \
+        const char*                filename,                                                         \
+        std::vector<ITYPE>&        row_ptr,                                                          \
+        std::vector<JTYPE>&        col_ind,                                                          \
+        std::vector<TTYPE>&        val,                                                              \
+        JTYPE&                     Mb,                                                               \
+        JTYPE&                     Nb,                                                               \
+        ITYPE&                     nnzb,                                                             \
+        JTYPE                      row_block_dim,                                                    \
+        JTYPE                      col_block_dim,                                                    \
+        rocsparse_index_base       base,                                                             \
+        bsr_construction_alg     construction);                                                    \
     template void rocsparse_init_gebsr_rocsparseio<ITYPE, JTYPE, TTYPE>(                             \
         const char*          filename,                                                               \
         std::vector<ITYPE>&  row_ptr,                                                                \
@@ -2131,10 +2281,12 @@ void rocsparse_init_gebsr_pentadiagonal(std::vector<I>&      row_ptr,
         ITYPE & nnzb,                                                                                \
         JTYPE                      row_block_dim,                                                    \
         JTYPE                      col_block_dim,                                                    \
+        rocsparse_direction        block_dir,                                                        \
         rocsparse_index_base       base,                                                             \
         rocsparse_matrix_init_kind init_kind,                                                        \
         bool                       full_rank,                                                        \
-        bool                       to_int);
+        bool                       to_int,                                                           \
+        bsr_construction_alg     construction);
 
 INSTANTIATEI(int32_t);
 INSTANTIATEI(int64_t);

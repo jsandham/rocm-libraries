@@ -331,7 +331,7 @@ void testing_spgemm_bsr(const Arguments& arg)
     rf.init_gebsr(hB.ptr,
                   hB.ind,
                   hB.val,
-                  hB.dir,
+                  hB.block_direction,
                   hB.mb,
                   hB.nb,
                   hB.nnzb,
@@ -344,7 +344,7 @@ void testing_spgemm_bsr(const Arguments& arg)
     rf.init_gebsr(hD.ptr,
                   hD.ind,
                   hD.val,
-                  hD.dir,
+                  hD.block_direction,
                   hD.mb,
                   hD.nb,
                   hD.nnzb,
@@ -408,7 +408,7 @@ void testing_spgemm_bsr(const Arguments& arg)
 
     if(nnzb_C > 0)
     {
-        dC.define(dC.dir, dC.mb, dC.nb, nnzb_C, dC.row_block_dim, dC.col_block_dim, dC.base);
+        dC.define(dC.block_direction, dC.mb, dC.nb, nnzb_C, dC.row_block_dim, dC.col_block_dim, dC.base);
         CHECK_ROCSPARSE_ERROR(rocsparse_bsr_set_pointers(C, dC));
     }
 
@@ -435,7 +435,7 @@ void testing_spgemm_bsr(const Arguments& arg)
                                    hC.base,
                                    hD.base);
 
-        hC.define(hC.dir, hC.mb, hC.nb, hC_nnzb, hC.row_block_dim, hC.col_block_dim, hC.base);
+        hC.define(hC.block_direction, hC.mb, hC.nb, hC_nnzb, hC.row_block_dim, hC.col_block_dim, hC.base);
 
         host_bsrgemm<T, I, J>(dir,
                               hA.mb,

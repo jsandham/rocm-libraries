@@ -514,7 +514,7 @@ void testing_bsrgemm(const Arguments& arg)
         rf.init_gebsr(h_B.ptr,
                       h_B.ind,
                       h_B.val,
-                      h_B.dir,
+                      h_B.block_direction,
                       h_B.mb,
                       h_B.nb,
                       h_B.nnzb,
@@ -533,7 +533,7 @@ void testing_bsrgemm(const Arguments& arg)
         rf.init_gebsr(h_D.ptr,
                       h_D.ind,
                       h_D.val,
-                      h_D.dir,
+                      h_D.block_direction,
                       h_D.mb,
                       h_D.nb,
                       h_D.nnzb,
@@ -551,7 +551,7 @@ void testing_bsrgemm(const Arguments& arg)
         rf.init_gebsr(h_B.ptr,
                       h_B.ind,
                       h_B.val,
-                      h_B.dir,
+                      h_B.block_direction,
                       h_B.mb,
                       h_B.nb,
                       h_B.nnzb,
@@ -566,7 +566,7 @@ void testing_bsrgemm(const Arguments& arg)
         rf.init_gebsr(h_D.ptr,
                       h_D.ind,
                       h_D.val,
-                      h_D.dir,
+                      h_D.block_direction,
                       h_D.mb,
                       h_D.nb,
                       h_D.nnzb,
@@ -624,7 +624,7 @@ void testing_bsrgemm(const Arguments& arg)
                                                            h_D.base);
 
         h_C.define(
-            h_C.dir, h_C.mb, h_C.nb, out_nnzb, h_C.row_block_dim, h_C.col_block_dim, h_C.base);
+            h_C.block_direction, h_C.mb, h_C.nb, out_nnzb, h_C.row_block_dim, h_C.col_block_dim, h_C.base);
 
         host_bsrgemm<T, rocsparse_int, rocsparse_int>(dir,
                                                       h_A.mb,
@@ -657,7 +657,7 @@ void testing_bsrgemm(const Arguments& arg)
         CHECK_ROCSPARSE_ERROR(rocsparse_bsrgemm_nnzb(PARAMS_NNZB(d_A, d_B, d_C, d_D, h_out_nnz)));
 
         d_C.define(
-            d_C.dir, d_C.mb, d_C.nb, *h_out_nnz, d_C.row_block_dim, d_C.col_block_dim, d_C.base);
+            d_C.block_direction, d_C.mb, d_C.nb, *h_out_nnz, d_C.row_block_dim, d_C.col_block_dim, d_C.base);
         CHECK_ROCSPARSE_ERROR(rocsparse_bsrgemm<T>(PARAMS(h_alpha, h_beta, d_A, d_B, d_C, d_D)));
         if(ROCSPARSE_REPRODUCIBILITY)
         {
@@ -671,7 +671,7 @@ void testing_bsrgemm(const Arguments& arg)
         CHECK_ROCSPARSE_ERROR(rocsparse_bsrgemm_nnzb(PARAMS_NNZB(d_A, d_B, d_C, d_D, d_out_nnz)));
         host_scalar<rocsparse_int> h_out_nnz2(d_out_nnz);
         d_C.define(
-            d_C.dir, d_C.mb, d_C.nb, *h_out_nnz2, d_C.row_block_dim, d_C.col_block_dim, d_C.base);
+            d_C.block_direction, d_C.mb, d_C.nb, *h_out_nnz2, d_C.row_block_dim, d_C.col_block_dim, d_C.base);
         CHECK_ROCSPARSE_ERROR(rocsparse_bsrgemm<T>(PARAMS(d_alpha, d_beta, d_A, d_B, d_C, d_D)));
         if(ROCSPARSE_REPRODUCIBILITY)
         {
@@ -689,7 +689,7 @@ void testing_bsrgemm(const Arguments& arg)
         rocsparse_int out_nnz;
         CHECK_ROCSPARSE_ERROR(rocsparse_bsrgemm_nnzb(PARAMS_NNZB(d_A, d_B, d_C, d_D, &out_nnz)));
         d_C.define(
-            d_C.dir, d_C.mb, d_C.nb, out_nnz, d_C.row_block_dim, d_C.col_block_dim, d_C.base);
+            d_C.block_direction, d_C.mb, d_C.nb, out_nnz, d_C.row_block_dim, d_C.col_block_dim, d_C.base);
 
         const double gpu_solve_time_used = rocsparse_clients::run_benchmark(
             arg, rocsparse_bsrgemm<T>, PARAMS(h_alpha, h_beta, d_A, d_B, d_C, d_D));

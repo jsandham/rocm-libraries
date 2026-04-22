@@ -171,9 +171,15 @@ void rocsparse_matrix_factory_laplace2d<T, I, J>::init_gebsr(std::vector<I>&    
                                                              rocsparse_index_base   base,
                                                              rocsparse_matrix_type  matrix_type,
                                                              rocsparse_fill_mode    uplo,
-                                                             rocsparse_storage_mode storage)
+                                                             rocsparse_storage_mode storage,
+                                                             bsr_construction_alg   construction)
 {
     ROCSPARSE_CLIENTS_ROUTINE_TRACE;
+
+    (void)dirb;
+    (void)matrix_type;
+    (void)uplo;
+    (void)construction;
 
     rocsparse_init_gebsr_laplace2d(bsr_row_ptr,
                                    bsr_col_ind,

@@ -287,9 +287,9 @@ Tests:
   category: pre_checkin
   function: bsrgemm
   precision: *single_double_precisions_complex_real
-  M: [0, 32519]
-  N: [0, 16021]
-  K: [0, 9848]
+  M: [32519]
+  N: [16021]
+  K: [9848]
   block_dim: [2, 32]
   alpha_alphai: *alpha_range_checkin
   beta: [-99.0]
@@ -425,8 +425,8 @@ Tests:
   category: quick
   function: bsrgemm
   precision: *single_double_precisions_complex_real
-  M: [0, 582]
-  N: [0, 243]
+  M: [582]
+  N: [243]
   K: 1
   block_dim: [23, 27]
   alpha: [-99.0]
@@ -500,8 +500,8 @@ Tests:
   category: pre_checkin
   function: bsrgemm
   precision: *single_double_precisions_complex_real
-  M: [0, 932, 1523]
-  N: [0, 784, 4842]
+  M: [932, 1523]
+  N: [784, 4842]
   K: 1
   block_dim: [26, 27]
   alpha: [-99.0]

@@ -64,9 +64,18 @@ void rocsparse_matrix_factory_zero<T, I, J>::init_gebsr(std::vector<I>&        b
                                                         rocsparse_index_base   base,
                                                         rocsparse_matrix_type  matrix_type,
                                                         rocsparse_fill_mode    uplo,
-                                                        rocsparse_storage_mode storage)
+                                                        rocsparse_storage_mode storage,
+                                                        bsr_construction_alg   construction)
 {
     ROCSPARSE_CLIENTS_ROUTINE_TRACE;
+
+    (void)dirb;
+    (void)row_block_dim;
+    (void)col_block_dim;
+    (void)matrix_type;
+    (void)uplo;
+    (void)storage;
+    (void)construction;
 
     bsr_row_ptr.resize((Mb > 0) ? (Mb + 1) : 0, static_cast<I>(base));
     bsr_col_ind.resize(0);

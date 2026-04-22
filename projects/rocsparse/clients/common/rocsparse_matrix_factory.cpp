@@ -429,7 +429,8 @@ void rocsparse_matrix_factory<T, I, J>::init_gebsr(std::vector<I>&      bsr_row_
                                                    I&                   nnzb,
                                                    J&                   row_block_dim,
                                                    J&                   col_block_dim,
-                                                   rocsparse_index_base base)
+                                                   rocsparse_index_base base,
+                                                   bsr_construction_alg construction)
 {
     ROCSPARSE_CLIENTS_ROUTINE_TRACE;
 
@@ -445,7 +446,8 @@ void rocsparse_matrix_factory<T, I, J>::init_gebsr(std::vector<I>&      bsr_row_
                                  base,
                                  this->m_arg.matrix_type,
                                  this->m_arg.uplo,
-                                 this->m_arg.storage);
+                                 this->m_arg.storage,
+                                 construction);
 }
 
 template <typename T, typename I, typename J>
@@ -456,7 +458,8 @@ void rocsparse_matrix_factory<T, I, J>::init_gebsr(host_gebsr_matrix<T, I, J>& t
                                                    I&                          nnzb_,
                                                    J&                          row_block_dim_,
                                                    J&                          col_block_dim_,
-                                                   rocsparse_index_base        base_)
+                                                   rocsparse_index_base        base_,
+                                                   bsr_construction_alg        construction)
 {
     ROCSPARSE_CLIENTS_ROUTINE_TRACE;
 
@@ -479,7 +482,8 @@ void rocsparse_matrix_factory<T, I, J>::init_gebsr(host_gebsr_matrix<T, I, J>& t
                                  that.base,
                                  this->m_arg.matrix_type,
                                  this->m_arg.uplo,
-                                 this->m_arg.storage);
+                                 this->m_arg.storage,
+                                 construction);
 
     mb_            = that.mb;
     nb_            = that.nb;
@@ -489,14 +493,14 @@ void rocsparse_matrix_factory<T, I, J>::init_gebsr(host_gebsr_matrix<T, I, J>& t
 }
 
 template <typename T, typename I, typename J>
-void rocsparse_matrix_factory<T, I, J>::init_gebsr(host_gebsr_matrix<T, I, J>& that)
+void rocsparse_matrix_factory<T, I, J>::init_gebsr(host_gebsr_matrix<T, I, J>& that,
+                                                   bsr_construction_alg        construction)
 {
     ROCSPARSE_CLIENTS_ROUTINE_TRACE;
 
     that.block_direction = this->m_arg.direction;
-    that.mb              = this->m_arg.M;
-    that.nb              = this->m_arg.N;
-    that.nnzb            = this->m_arg.nnz;
+    that.mb              = (this->m_arg.M + this->m_arg.row_block_dimA - 1) / this->m_arg.row_block_dimA;
+    that.nb              = (this->m_arg.N + this->m_arg.col_block_dimA - 1) / this->m_arg.col_block_dimA;
     that.row_block_dim   = this->m_arg.row_block_dimA;
     that.col_block_dim   = this->m_arg.col_block_dimA;
     that.base            = this->m_arg.baseA;
@@ -512,7 +516,8 @@ void rocsparse_matrix_factory<T, I, J>::init_gebsr(host_gebsr_matrix<T, I, J>& t
                                  that.base,
                                  this->m_arg.matrix_type,
                                  this->m_arg.uplo,
-                                 this->m_arg.storage);
+                                 this->m_arg.storage,
+                                 construction);
 }
 
 template <typename T, typename I, typename J>
@@ -521,14 +526,14 @@ void rocsparse_matrix_factory<T, I, J>::init_gebsr(host_gebsr_matrix<T, I, J>& t
                                                    J&                          nb,
                                                    J&                          row_block_dim,
                                                    J&                          col_block_dim,
-                                                   rocsparse_index_base        base_)
+                                                   rocsparse_index_base        base_,
+                                                   bsr_construction_alg        construction)
 {
     ROCSPARSE_CLIENTS_ROUTINE_TRACE;
 
     that.base = base_;
     that.mb   = mb;
     that.nb   = nb;
-    that.nnzb = this->m_arg.nnz;
 
     that.row_block_dim = row_block_dim;
     that.col_block_dim = col_block_dim;
@@ -545,7 +550,8 @@ void rocsparse_matrix_factory<T, I, J>::init_gebsr(host_gebsr_matrix<T, I, J>& t
                                  that.base,
                                  this->m_arg.matrix_type,
                                  this->m_arg.uplo,
-                                 this->m_arg.storage);
+                                 this->m_arg.storage,
+                                 construction);
 
     mb            = that.mb;
     nb            = that.nb;
@@ -553,72 +559,6 @@ void rocsparse_matrix_factory<T, I, J>::init_gebsr(host_gebsr_matrix<T, I, J>& t
     col_block_dim = that.col_block_dim;
 }
 
-template <typename T, typename I, typename J>
-void rocsparse_matrix_factory<T, I, J>::init_gebsr_spezial(host_gebsr_matrix<T, I, J>& that,
-                                                           J&                          Mb,
-                                                           J&                          Nb)
-{
-    ROCSPARSE_CLIENTS_ROUTINE_TRACE;
-
-    I idx = 0;
-
-    host_csr_matrix<T, I, J> hA;
-    rocsparse_direction      direction     = this->m_arg.direction;
-    rocsparse_index_base     base          = this->m_arg.baseA;
-    J                        row_block_dim = this->m_arg.row_block_dimA;
-    J                        col_block_dim = this->m_arg.col_block_dimA;
-    this->init_csr(hA, Mb, Nb, base);
-
-    that.define(direction, Mb, Nb, hA.nnz, row_block_dim, col_block_dim, base);
-
-    switch(direction)
-    {
-    case rocsparse_direction_column:
-    {
-        T*       val    = that.val;
-        const I* hA_ptr = hA.ptr.data();
-        for(J i = 0; i < Mb; ++i)
-        {
-            for(J r = 0; r < row_block_dim; ++r)
-            {
-                for(I k = hA_ptr[i] - base; k < hA_ptr[i + 1] - base; ++k)
-                {
-                    for(J c = 0; c < col_block_dim; ++c)
-                    {
-                        val[k * row_block_dim * col_block_dim + c * row_block_dim + r]
-                            = static_cast<T>(++idx);
-                    }
-                }
-            }
-        }
-        break;
-    }
-
-    case rocsparse_direction_row:
-    {
-        T*       val    = that.val;
-        const I* hA_ptr = hA.ptr.data();
-        for(J i = 0; i < Mb; ++i)
-        {
-            for(J r = 0; r < row_block_dim; ++r)
-            {
-                for(I k = hA_ptr[i] - base; k < hA_ptr[i + 1] - base; ++k)
-                {
-                    for(J c = 0; c < col_block_dim; ++c)
-                    {
-                        val[k * row_block_dim * col_block_dim + r * col_block_dim + c]
-                            = static_cast<T>(++idx);
-                    }
-                }
-            }
-        }
-        break;
-    }
-    }
-
-    that.ptr.transfer_from(hA.ptr);
-    that.ind.transfer_from(hA.ind);
-}
 
 template <typename T, typename I, typename J>
 void rocsparse_matrix_factory<T, I, J>::init_gebsc(std::vector<I>&      bsc_col_ptr,
@@ -630,7 +570,8 @@ void rocsparse_matrix_factory<T, I, J>::init_gebsc(std::vector<I>&      bsc_col_
                                                    I&                   nnzb,
                                                    J&                   row_block_dim,
                                                    J&                   col_block_dim,
-                                                   rocsparse_index_base base)
+                                                   rocsparse_index_base base,
+                                                   bsr_construction_alg construction)
 {
     ROCSPARSE_CLIENTS_ROUTINE_TRACE;
 
@@ -646,7 +587,8 @@ void rocsparse_matrix_factory<T, I, J>::init_gebsc(std::vector<I>&      bsc_col_
                                  base,
                                  this->m_arg.matrix_type,
                                  this->m_arg.uplo,
-                                 this->m_arg.storage);
+                                 this->m_arg.storage,
+                                 construction);
 }
 
 //
@@ -662,7 +604,8 @@ void rocsparse_matrix_factory<T, I, J>::init_bsr(std::vector<I>&      bsr_row_pt
                                                  J&                   Nb,
                                                  I&                   nnzb,
                                                  J&                   block_dim,
-                                                 rocsparse_index_base base)
+                                                 rocsparse_index_base base,
+                                                 bsr_construction_alg construction)
 {
     ROCSPARSE_CLIENTS_ROUTINE_TRACE;
 
@@ -678,119 +621,141 @@ void rocsparse_matrix_factory<T, I, J>::init_bsr(std::vector<I>&      bsr_row_pt
                                  base,
                                  this->m_arg.matrix_type,
                                  this->m_arg.uplo,
-                                 this->m_arg.storage);
+                                 this->m_arg.storage,
+                                 construction);
 }
 
-template <typename T, typename I, typename J, class FILTER = void>
-struct traits_init_bsr
-{
-    static void init(rocsparse_matrix_factory<T, I, J>& factory,
-                     host_gebsr_matrix<T, I, J>&        that,
-                     device_gebsr_matrix<T, I, J>&      that_on_device,
-                     J&                                 mb_,
-                     J&                                 nb_,
-                     rocsparse_index_base               base_)
-    {
-        std::cout << "default traits_init_bsr not implemented (file: " << __FILE__ << ")"
-                  << std::endl;
-        throw rocsparse_status_internal_error;
-    }
-};
+// template <typename T, typename I, typename J, class FILTER = void>
+// struct traits_init_bsr
+// {
+//     static void init(rocsparse_matrix_factory<T, I, J>& factory,
+//                      host_gebsr_matrix<T, I, J>&        that,
+//                      device_gebsr_matrix<T, I, J>&      that_on_device,
+//                      J&                                 mb_,
+//                      J&                                 nb_,
+//                      rocsparse_index_base               base_)
+//     {
+//         std::cout << "default traits_init_bsr not implemented (file: " << __FILE__ << ")"
+//                   << std::endl;
+//         throw rocsparse_status_internal_error;
+//     }
+// };
 
-template <typename T, typename I, typename J>
-struct traits_init_bsr<
-    T,
-    I,
-    J,
-    std::enable_if_t<std::is_same<rocsparse_int, J>{} && std::is_same<rocsparse_int, I>{}>>
-{
+// template <typename T, typename I, typename J>
+// struct traits_init_bsr<
+//     T,
+//     I,
+//     J,
+//     std::enable_if_t<std::is_same<rocsparse_int, J>{} && std::is_same<rocsparse_int, I>{}>>
+// {
 
-    static void init(rocsparse_matrix_factory<T, I, J>& factory,
-                     host_gebsr_matrix<T, I, J>&        that,
-                     device_gebsr_matrix<T, I, J>&      that_on_device,
-                     J&                                 mb_,
-                     J&                                 nb_,
-                     rocsparse_index_base               base_)
-    {
-        ROCSPARSE_CLIENTS_ROUTINE_TRACE;
+//     static void init(rocsparse_matrix_factory<T, I, J>& factory,
+//                      host_gebsr_matrix<T, I, J>&        that,
+//                      device_gebsr_matrix<T, I, J>&      that_on_device,
+//                      J&                                 mb_,
+//                      J&                                 nb_,
+//                      rocsparse_index_base               base_)
+//     {
+//         ROCSPARSE_CLIENTS_ROUTINE_TRACE;
 
-        //
-        // Initialize in case init_csr requires it as input.
-        //
-        rocsparse_int            block_dim = factory.m_arg.block_dim;
-        rocsparse_int            M         = mb_ * block_dim;
-        rocsparse_int            N         = nb_ * block_dim;
-        host_csr_matrix<T, I, J> hA_uncompressed;
+//         //
+//         // Initialize in case init_csr requires it as input.
+//         //
+//         rocsparse_int            block_dim = factory.m_arg.block_dim;
+//         rocsparse_int            M         = mb_ * block_dim;
+//         rocsparse_int            N         = nb_ * block_dim;
+//         host_csr_matrix<T, I, J> hA_uncompressed;
 
-        // Always generate sorted CSR matrix as convert routine requires CSR matrix to be sorted
-        hA_uncompressed.define(M, N, 0, base_);
-        factory.init_csr(hA_uncompressed.ptr,
-                         hA_uncompressed.ind,
-                         hA_uncompressed.val,
-                         hA_uncompressed.m,
-                         hA_uncompressed.n,
-                         hA_uncompressed.nnz,
-                         hA_uncompressed.base,
-                         rocsparse_matrix_type_general,
-                         rocsparse_fill_mode_lower,
-                         rocsparse_storage_mode_sorted);
+//         // Always generate sorted CSR matrix as convert routine requires CSR matrix to be sorted
+//         hA_uncompressed.define(M, N, 0, base_);
+//         factory.init_csr(hA_uncompressed.ptr,
+//                          hA_uncompressed.ind,
+//                          hA_uncompressed.val,
+//                          hA_uncompressed.m,
+//                          hA_uncompressed.n,
+//                          hA_uncompressed.nnz,
+//                          hA_uncompressed.base,
+//                          rocsparse_matrix_type_general,
+//                          rocsparse_fill_mode_lower,
+//                          rocsparse_storage_mode_sorted);
 
-        {
-            device_csr_matrix<T, I, J> dA_uncompressed(hA_uncompressed);
-            device_csr_matrix<T, I, J> dA_compressed;
-            rocsparse_matrix_utils::compress(dA_compressed, dA_uncompressed, base_);
-            rocsparse_matrix_utils::convert(dA_compressed,
-                                            factory.m_arg.direction,
-                                            block_dim,
-                                            base_,
-                                            rocsparse_storage_mode_sorted,
-                                            that_on_device);
-        }
+//         {
+//             device_csr_matrix<T, I, J> dA_uncompressed(hA_uncompressed);
+//             device_csr_matrix<T, I, J> dA_compressed;
+//             rocsparse_matrix_utils::compress(dA_compressed, dA_uncompressed, base_);
+//             rocsparse_matrix_utils::convert(dA_compressed,
+//                                             factory.m_arg.direction,
+//                                             block_dim,
+//                                             base_,
+//                                             rocsparse_storage_mode_sorted,
+//                                             that_on_device);
+//         }
 
-        that(that_on_device);
+//         that(that_on_device);
 
-        mb_ = that.mb;
-        nb_ = that.nb;
+//         mb_ = that.mb;
+//         nb_ = that.nb;
 
-        switch(factory.m_arg.storage)
-        {
-        case rocsparse_storage_mode_unsorted:
-        {
-            rocsparse_matrix_utils::host_gebsrunsort<T>(
-                that.ptr.data(), that.ind.data(), that.mb, that.base);
-            that_on_device(that);
-            break;
-        }
-        case rocsparse_storage_mode_sorted:
-        {
-            break;
-        }
-        }
-    };
-};
+//         switch(factory.m_arg.storage)
+//         {
+//         case rocsparse_storage_mode_unsorted:
+//         {
+//             rocsparse_matrix_utils::host_gebsrunsort<T>(
+//                 that.ptr.data(), that.ind.data(), that.mb, that.base);
+//             that_on_device(that);
+//             break;
+//         }
+//         case rocsparse_storage_mode_sorted:
+//         {
+//             break;
+//         }
+//         }
+//     };
+// };
 
-template <typename T, typename I, typename J>
-void rocsparse_matrix_factory<T, I, J>::init_bsr(host_gebsr_matrix<T, I, J>& that_,
-                                                 J&                          mb_,
-                                                 J&                          nb_,
-                                                 rocsparse_index_base        base_)
-{
-    ROCSPARSE_CLIENTS_ROUTINE_TRACE;
+// template <typename T, typename I, typename J>
+// void rocsparse_matrix_factory<T, I, J>::init_bsr(host_gebsr_matrix<T, I, J>& that_,
+//                                                  J&                          mb_,
+//                                                  J&                          nb_,
+//                                                  rocsparse_index_base        base_)
+// {
+//     ROCSPARSE_CLIENTS_ROUTINE_TRACE;
 
-    device_gebsr_matrix<T, I, J> dB;
-    this->init_bsr(that_, dB, mb_, nb_, base_);
-}
+//     device_gebsr_matrix<T, I, J> dB;
+//     this->init_bsr(that_, dB, mb_, nb_, base_);
+// }
 
 template <typename T, typename I, typename J>
 void rocsparse_matrix_factory<T, I, J>::init_bsr(host_gebsr_matrix<T, I, J>&   that_,
                                                  device_gebsr_matrix<T, I, J>& that_on_device_,
                                                  J&                            mb_,
                                                  J&                            nb_,
-                                                 rocsparse_index_base          base_)
+                                                 rocsparse_index_base          base_,
+                                                 bsr_construction_alg          construction)
 {
     ROCSPARSE_CLIENTS_ROUTINE_TRACE;
 
-    traits_init_bsr<T, I, J>::init(*this, that_, that_on_device_, mb_, nb_, base_);
+    that_.block_direction = this->m_arg.direction;
+    that_.mb              = mb_;
+    that_.nb              = nb_;
+    that_.row_block_dim   = this->m_arg.block_dim;
+    that_.col_block_dim   = this->m_arg.block_dim;
+    that_.base            = base_;
+
+    this->init_gebsr(that_,
+                     that_.mb,
+                     that_.nb,
+                     that_.row_block_dim,
+                     that_.col_block_dim,
+                     that_.base,
+                     construction);
+
+    that_on_device_(that_);
+
+    mb_ = that_.mb;
+    nb_ = that_.nb;
+
+    //traits_init_bsr<T, I, J>::init(*this, that_, that_on_device_, mb_, nb_, base_);
 }
 
 //

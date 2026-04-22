@@ -27,6 +27,7 @@
 #define ROCSPARSE_MATRIX_FACTORY_BASE_HPP
 
 #include "rocsparse.hpp"
+#include "rocsparse_init.hpp"
 #include <vector>
 template <typename T, typename I = rocsparse_int, typename J = rocsparse_int>
 struct rocsparse_matrix_factory_base
@@ -82,7 +83,9 @@ public:
                             rocsparse_index_base   base,
                             rocsparse_matrix_type  matrix_type,
                             rocsparse_fill_mode    uplo,
-                            rocsparse_storage_mode storage)
+                            rocsparse_storage_mode storage,
+                            bsr_construction_alg   construction
+                            = bsr_construction_alg::convert_csr)
         = 0;
 
     // @brief Initialize a coo-sparse matrix.

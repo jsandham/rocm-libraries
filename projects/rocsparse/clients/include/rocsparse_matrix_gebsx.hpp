@@ -40,8 +40,6 @@ struct gebsx_matrix
     template <typename S>
     using array_t = typename memory_traits<MODE>::template array_t<S>;
 
-    static constexpr rocsparse_direction dir = direction_;
-
     J                      mb{};
     J                      nb{};
     I                      nnzb{};

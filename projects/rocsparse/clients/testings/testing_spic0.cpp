@@ -27,6 +27,8 @@
 #include "rocsparse_enum.hpp"
 #include "testing.hpp"
 
+#include <iostream>
+
 namespace rocsparse_clients
 {
     class spic0_descr
@@ -968,6 +970,55 @@ void testing_spic0(const Arguments& arg)
 
     static constexpr const bool             full_rank = true;
     rocsparse_clients::spmat_descr<T, I, J> A(arg, batch_count, full_rank);
+
+    std::cout << "\n========== Matrix A (spmat_descr after construction) ==========\n";
+    const auto& h = A.template host<rocsparse_format_bsr>();
+    h.info();
+    // switch(A.get_format())
+    // {
+    // case rocsparse_format_csr:
+    //     A.template host<rocsparse_format_csr>().print();
+    //     break;
+    // case rocsparse_format_csc:
+    //     A.template host<rocsparse_format_csc>().print();
+    //     break;
+    // case rocsparse_format_coo:
+    //     A.template host<rocsparse_format_coo>().print();
+    //     break;
+    // case rocsparse_format_coo_aos:
+    //     A.template host<rocsparse_format_coo_aos>().print();
+    //     break;
+    // case rocsparse_format_bsr:
+    // {
+    //     const auto& h = A.template host<rocsparse_format_bsr>();
+    //     h.info();
+    //     // std::cout << "bsr_row_ptr (" << h.ptr.size() << "): ";
+    //     // for(size_t i = 0; i < h.ptr.size(); ++i)
+    //     // {
+    //     //     std::cout << h.ptr[i] << (i + 1 < h.ptr.size() ? " " : "");
+    //     // }
+    //     // std::cout << "\nbsr_col_ind (" << h.ind.size() << "): ";
+    //     // for(size_t i = 0; i < h.ind.size(); ++i)
+    //     // {
+    //     //     std::cout << h.ind[i] << (i + 1 < h.ind.size() ? " " : "");
+    //     // }
+    //     // std::cout << "\n";
+    //     break;
+    // }
+    // case rocsparse_format_ell:
+    //     A.template host<rocsparse_format_ell>().info();
+    //     break;
+    // case rocsparse_format_bell:
+    //     A.template host<rocsparse_format_bell>().info();
+    //     break;
+    // case rocsparse_format_sell:
+    //     A.template host<rocsparse_format_sell>().info();
+    //     break;
+    // default:
+    //     std::cout << "(no host printer for format " << static_cast<int>(A.get_format()) << ")\n";
+    //     break;
+    // }
+    // std::cout << "========== End matrix A ==========\n\n";
 
     if(false == A.is_square())
     {

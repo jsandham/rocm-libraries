@@ -169,7 +169,8 @@ void testing_spmm_bsr(const Arguments& arg)
                             (trans_A == rocsparse_operation_none) ? Kb : Mb,
                             nnzb_A,
                             block_dim,
-                            base);
+                            base,
+                            bsr_construction_alg::convert_csr);
 
     M = Mb * block_dim;
     K = Kb * block_dim;

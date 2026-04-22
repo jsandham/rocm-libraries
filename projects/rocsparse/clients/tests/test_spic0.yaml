@@ -60,6 +60,21 @@ Definitions:
 
 
 Tests:
+- name: spic0_file
+  category: pre_checkin
+  function: spic0
+  precision: *single_only_precisions
+  M: 1
+  N: 1
+  block_dim: [2]
+  apol: [rocsparse_analysis_policy_force]
+  baseA: [rocsparse_index_base_zero]
+  direction: [rocsparse_direction_column]
+  matrix: [rocsparse_matrix_file_rocalution]
+  filename: [nos1]
+  formatA: [rocsparse_format_bsr]
+  indextype: *i32
+
 
 - name: spic0_extra
   category: quick

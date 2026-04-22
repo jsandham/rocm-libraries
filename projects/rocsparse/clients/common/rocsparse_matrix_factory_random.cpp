@@ -128,7 +128,8 @@ void rocsparse_matrix_factory_random<T, I, J>::init_gebsr(std::vector<I>&       
                                                           rocsparse_index_base   base,
                                                           rocsparse_matrix_type  matrix_type,
                                                           rocsparse_fill_mode    uplo,
-                                                          rocsparse_storage_mode storage)
+                                                          rocsparse_storage_mode storage,
+                                                          bsr_construction_alg   construction)
 {
     ROCSPARSE_CLIENTS_ROUTINE_TRACE;
 
@@ -140,10 +141,12 @@ void rocsparse_matrix_factory_random<T, I, J>::init_gebsr(std::vector<I>&       
                                 nnzb,
                                 row_block_dim,
                                 col_block_dim,
+                                dirb,
                                 base,
                                 this->m_matrix_init_kind,
                                 this->m_fullrank,
-                                this->m_to_int);
+                                this->m_to_int,
+                                construction);
 
     switch(storage)
     {
