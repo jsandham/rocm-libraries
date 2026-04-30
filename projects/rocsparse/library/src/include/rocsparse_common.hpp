@@ -2730,7 +2730,8 @@ namespace rocsparse
     template <bool SLEEP>
     __device__ __forceinline__ int32_t spin_loop(int32_t* __restrict__ done, int scope)
     {
-        int32_t  local_done    = __hip_atomic_load(done, __ATOMIC_RELAXED, scope);
+        // int32_t  local_done    = __hip_atomic_load(done, __ATOMIC_RELAXED, scope);
+        int32_t  local_done    = __hip_atomic_load(done, __ATOMIC_ACQUIRE, scope);
         uint32_t times_through = 0;
         while(!local_done)
         {
@@ -2746,7 +2747,8 @@ namespace rocsparse
                     ++times_through;
                 }
             }
-            local_done = __hip_atomic_load(done, __ATOMIC_RELAXED, scope);
+            // local_done = __hip_atomic_load(done, __ATOMIC_RELAXED, scope);
+            local_done = __hip_atomic_load(done, __ATOMIC_ACQUIRE, scope);
         }
         return local_done;
     }

@@ -386,14 +386,14 @@ namespace rocsparse
         }
 
         // If diag type is unit, re-initialize zero pivot to remove structural zeros
-        if(descr->diag_type == rocsparse_diag_type_unit)
-        {
-            RETURN_IF_ROCSPARSE_ERROR(rocsparse::assign_async(
-                1,
-                reinterpret_cast<rocsparse_int*>(bsrsv_info->get_position()),
-                std::numeric_limits<rocsparse_int>::max(),
-                stream));
-        }
+        // if(descr->diag_type == rocsparse_diag_type_unit)
+        // {
+        //     RETURN_IF_ROCSPARSE_ERROR(rocsparse::assign_async(
+        //         1,
+        //         reinterpret_cast<rocsparse_int*>(bsrsv_info->get_position()),
+        //         std::numeric_limits<rocsparse_int>::max(),
+        //         stream));
+        // }
 
         // Pointers to differentiate between transpose mode
         const rocsparse_int* local_bsr_row_ptr = bsr_row_ptr;
@@ -404,64 +404,86 @@ namespace rocsparse
 
         // When computing transposed triangular solve, we first need to update the
         // transposed matrix values
-        if(trans == rocsparse_operation_transpose)
-        {
-            T* bsrt_val = reinterpret_cast<T*>(ptr);
+        // if(trans == rocsparse_operation_transpose)
+        // {
+        //     T* bsrt_val = reinterpret_cast<T*>(ptr);
 
-            // Gather transposed values
-            LAUNCH_BSRSV_GTHR(256, 64, block_dim);
+        //     // Gather transposed values
+        //     LAUNCH_BSRSV_GTHR(256, 64, block_dim);
 
-            local_bsr_row_ptr = (rocsparse_int*)trm_info->get_transposed_row_ptr();
-            local_bsr_col_ind = (rocsparse_int*)trm_info->get_transposed_col_ind();
-            local_bsr_val     = (T*)bsrt_val;
+        //     local_bsr_row_ptr = (rocsparse_int*)trm_info->get_transposed_row_ptr();
+        //     local_bsr_col_ind = (rocsparse_int*)trm_info->get_transposed_col_ind();
+        //     local_bsr_val     = (T*)bsrt_val;
 
-            fill_mode = (fill_mode == rocsparse_fill_mode_lower) ? rocsparse_fill_mode_upper
-                                                                 : rocsparse_fill_mode_lower;
-        }
+        //     fill_mode = (fill_mode == rocsparse_fill_mode_lower) ? rocsparse_fill_mode_upper
+        //                                                          : rocsparse_fill_mode_lower;
+        // }
 
         // Determine gcn_arch and ASIC revision
         const std::string gcn_arch_name = rocsparse::handle_get_arch_name(handle);
         const int         asicRev       = handle->asic_rev;
 
-        if(handle->wavefront_size == 64)
-        {
-            if(block_dim <= 8)
-            {
-                // Launch shared memory based kernel for small BSR block dimensions
-                LAUNCH_BSRSV_SHARED(
-                    fill_mode, handle->pointer_mode, 128, 64, 8, gcn_arch_name, asicRev);
-            }
-            else if(block_dim <= 16)
-            {
-                // Launch shared memory based kernel for small BSR block dimensions
-                LAUNCH_BSRSV_SHARED(
-                    fill_mode, handle->pointer_mode, 128, 64, 16, gcn_arch_name, asicRev);
-            }
-            else if(block_dim <= 32)
-            {
-                // Launch shared memory based kernel for small BSR block dimensions
-                LAUNCH_BSRSV_SHARED(
-                    fill_mode, handle->pointer_mode, 128, 64, 32, gcn_arch_name, asicRev);
-            }
-            else
-            {
-                // Launch general algorithm for large BSR block dimensions (> 32x32)
-                LAUNCH_BSRSV_GENERAL(
-                    fill_mode, handle->pointer_mode, 128, 64, gcn_arch_name, asicRev);
-            }
-        }
-        else
-        {
-            //
-            // This is wavefront 32, let's exclude it.
-            //
-            // LCOV_EXCL_START;
+        // if(handle->wavefront_size == 64)
+        // {
+        //     if(block_dim <= 8)
+        //     {
+        //         // Launch shared memory based kernel for small BSR block dimensions
+        //         LAUNCH_BSRSV_SHARED(
+        //             fill_mode, handle->pointer_mode, 128, 64, 8, gcn_arch_name, asicRev);
+        //     }
+        //     else if(block_dim <= 16)
+        //     {
+        //         // Launch shared memory based kernel for small BSR block dimensions
+        //         LAUNCH_BSRSV_SHARED(
+        //             fill_mode, handle->pointer_mode, 128, 64, 16, gcn_arch_name, asicRev);
+        //     }
+        //     else if(block_dim <= 32)
+        //     {
+        //         // Launch shared memory based kernel for small BSR block dimensions
+        //         LAUNCH_BSRSV_SHARED(
+        //             fill_mode, handle->pointer_mode, 128, 64, 32, gcn_arch_name, asicRev);
+        //     }
+        //     else
+        //     {
+        //         // Launch general algorithm for large BSR block dimensions (> 32x32)
+        //         LAUNCH_BSRSV_GENERAL(
+        //             fill_mode, handle->pointer_mode, 128, 64, gcn_arch_name, asicRev);
+        //     }
+        // }
+        // else
+        // {
+        //
+        // This is wavefront 32, let's exclude it.
+        //
+        // LCOV_EXCL_START;
 
-            // Launch general algorithm
-            LAUNCH_BSRSV_GENERAL(fill_mode, handle->pointer_mode, 128, 32, gcn_arch_name, asicRev);
+        std::cout << "111111111111111111111111" << std::endl;
+        // Launch general algorithm
+        //LAUNCH_BSRSV_GENERAL(fill_mode, handle->pointer_mode, 256, 32, gcn_arch_name, asicRev);
+        RETURN_IF_HIPLAUNCHKERNELGGL_ERROR(
+            (bsrsv_lower_general<256, 32, false>),
+            dim3((32 * mb - 1) / 256 + 1),
+            dim3(256),
+            0,
+            stream,
+            mb,
+            ROCSPARSE_DEVICE_HOST_SCALAR_ARGS(handle, alpha_device_host),
+            local_bsr_row_ptr,
+            local_bsr_col_ind,
+            local_bsr_val,
+            block_dim,
+            x,
+            y,
+            done_array,
+            (rocsparse_int*)trm_info->get_row_map(),
+            (rocsparse_int*)bsrsv_info->get_position(),
+            descr->base,
+            descr->diag_type,
+            dir,
+            handle->pointer_mode == rocsparse_pointer_mode_host);
 
-            // LCOV_EXCL_STOP;
-        }
+        // LCOV_EXCL_STOP;
+        // }
 
         return rocsparse_status_success;
     }
@@ -485,77 +507,77 @@ rocsparse_status rocsparse::bsrsv_solve_template(rocsparse_handle          handl
                                                  rocsparse_solve_policy    policy,
                                                  void*                     temp_buffer)
 {
-    ROCSPARSE_ROUTINE_TRACE;
+    // ROCSPARSE_ROUTINE_TRACE;
 
-    // Check for valid handle and matrix descriptor
-    ROCSPARSE_CHECKARG_HANDLE(0, handle);
-    ROCSPARSE_CHECKARG_POINTER(6, descr);
-    ROCSPARSE_CHECKARG_POINTER(11, info);
+    // // Check for valid handle and matrix descriptor
+    // ROCSPARSE_CHECKARG_HANDLE(0, handle);
+    // ROCSPARSE_CHECKARG_POINTER(6, descr);
+    // ROCSPARSE_CHECKARG_POINTER(11, info);
 
-    // Logging
-    rocsparse::log_trace(handle,
-                         rocsparse::replaceX<T>("rocsparse_Xbsrsv"),
-                         dir,
-                         trans,
-                         mb,
-                         nnzb,
-                         LOG_TRACE_SCALAR_VALUE(handle, alpha_device_host),
-                         (const void*&)descr,
-                         (const void*&)bsr_val,
-                         (const void*&)bsr_row_ptr,
-                         (const void*&)bsr_col_ind,
-                         block_dim,
-                         (const void*&)info,
-                         (const void*&)x,
-                         (const void*&)y,
-                         policy,
-                         (const void*&)temp_buffer);
+    // // Logging
+    // rocsparse::log_trace(handle,
+    //                      rocsparse::replaceX<T>("rocsparse_Xbsrsv"),
+    //                      dir,
+    //                      trans,
+    //                      mb,
+    //                      nnzb,
+    //                      LOG_TRACE_SCALAR_VALUE(handle, alpha_device_host),
+    //                      (const void*&)descr,
+    //                      (const void*&)bsr_val,
+    //                      (const void*&)bsr_row_ptr,
+    //                      (const void*&)bsr_col_ind,
+    //                      block_dim,
+    //                      (const void*&)info,
+    //                      (const void*&)x,
+    //                      (const void*&)y,
+    //                      policy,
+    //                      (const void*&)temp_buffer);
 
-    // Check direction
-    ROCSPARSE_CHECKARG_ENUM(1, dir);
-    ROCSPARSE_CHECKARG_ENUM(2, trans);
-    ROCSPARSE_CHECKARG_ENUM(14, policy);
+    // // Check direction
+    // ROCSPARSE_CHECKARG_ENUM(1, dir);
+    // ROCSPARSE_CHECKARG_ENUM(2, trans);
+    // ROCSPARSE_CHECKARG_ENUM(14, policy);
 
-    // Check operation type
-    ROCSPARSE_CHECKARG(
-        2,
-        trans,
-        (trans != rocsparse_operation_none && trans != rocsparse_operation_transpose),
-        rocsparse_status_not_implemented);
+    // // Check operation type
+    // ROCSPARSE_CHECKARG(
+    //     2,
+    //     trans,
+    //     (trans != rocsparse_operation_none && trans != rocsparse_operation_transpose),
+    //     rocsparse_status_not_implemented);
 
-    // Check matrix type
-    ROCSPARSE_CHECKARG(
-        6, descr, (descr->type != rocsparse_matrix_type_general), rocsparse_status_not_implemented);
+    // // Check matrix type
+    // ROCSPARSE_CHECKARG(
+    //     6, descr, (descr->type != rocsparse_matrix_type_general), rocsparse_status_not_implemented);
 
-    // Check matrix sorting mode
-    ROCSPARSE_CHECKARG(6,
-                       descr,
-                       (descr->storage_mode != rocsparse_storage_mode_sorted),
-                       rocsparse_status_requires_sorted_storage);
+    // // Check matrix sorting mode
+    // ROCSPARSE_CHECKARG(6,
+    //                    descr,
+    //                    (descr->storage_mode != rocsparse_storage_mode_sorted),
+    //                    rocsparse_status_requires_sorted_storage);
 
-    // Check sizes
-    ROCSPARSE_CHECKARG_SIZE(3, mb);
-    ROCSPARSE_CHECKARG_SIZE(4, nnzb);
-    ROCSPARSE_CHECKARG_SIZE(10, block_dim);
-    ROCSPARSE_CHECKARG(10, block_dim, (block_dim == 0), rocsparse_status_invalid_size);
+    // // Check sizes
+    // ROCSPARSE_CHECKARG_SIZE(3, mb);
+    // ROCSPARSE_CHECKARG_SIZE(4, nnzb);
+    // ROCSPARSE_CHECKARG_SIZE(10, block_dim);
+    // ROCSPARSE_CHECKARG(10, block_dim, (block_dim == 0), rocsparse_status_invalid_size);
 
-    ROCSPARSE_CHECKARG_ARRAY(8, mb, bsr_row_ptr);
-    ROCSPARSE_CHECKARG_ARRAY(12, mb, x);
-    ROCSPARSE_CHECKARG_ARRAY(13, mb, y);
+    // ROCSPARSE_CHECKARG_ARRAY(8, mb, bsr_row_ptr);
+    // ROCSPARSE_CHECKARG_ARRAY(12, mb, x);
+    // ROCSPARSE_CHECKARG_ARRAY(13, mb, y);
 
-    // Quick return if possible
-    if(mb == 0)
-    {
-        return rocsparse_status_success;
-    }
+    // // Quick return if possible
+    // if(mb == 0)
+    // {
+    //     return rocsparse_status_success;
+    // }
 
-    // Check pointer arguments
-    ROCSPARSE_CHECKARG_POINTER(5, alpha_device_host);
-    ROCSPARSE_CHECKARG_POINTER(15, temp_buffer);
+    // // Check pointer arguments
+    // ROCSPARSE_CHECKARG_POINTER(5, alpha_device_host);
+    // ROCSPARSE_CHECKARG_POINTER(15, temp_buffer);
 
-    // value arrays and column indices arrays must both be null (zero matrix) or both not null
-    ROCSPARSE_CHECKARG_ARRAY(7, nnzb, bsr_val);
-    ROCSPARSE_CHECKARG_ARRAY(9, nnzb, bsr_col_ind);
+    // // value arrays and column indices arrays must both be null (zero matrix) or both not null
+    // ROCSPARSE_CHECKARG_ARRAY(7, nnzb, bsr_val);
+    // ROCSPARSE_CHECKARG_ARRAY(9, nnzb, bsr_col_ind);
 
     RETURN_IF_ROCSPARSE_ERROR(rocsparse::bsrsv_solve_dispatch(handle,
                                                               dir,
