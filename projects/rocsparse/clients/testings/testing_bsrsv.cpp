@@ -27,10 +27,8 @@
 #include "rocsparse_enum.hpp"
 
 // BSR indexing macros
-#define BSR_IND(j, bi, bj, dir) \
-    ((dir == rocsparse_direction_row) ? BSR_IND_R(j, bi, bj) : BSR_IND_C(j, bi, bj))
+#define BSR_IND(j, bi, bj) BSR_IND_R(j, bi, bj)
 #define BSR_IND_R(j, bi, bj) (block_dim * block_dim * (j) + (bi) * block_dim + (bj))
-#define BSR_IND_C(j, bi, bj) (block_dim * block_dim * (j) + (bi) + (bj) * block_dim)
 
 template <bool SLEEP>
 __device__ __forceinline__ int32_t spin_loop(int32_t* __restrict__ done, int scope)
@@ -81,8 +79,8 @@ __device__ __forceinline__ double fma(double p, double q, double r)
 
 template <>
 __device__ __forceinline__ rocsparse_float_complex fma(rocsparse_float_complex p,
-                                                       rocsparse_float_complex q,
-                                                       rocsparse_float_complex r)
+                                                    rocsparse_float_complex q,
+                                                    rocsparse_float_complex r)
 {
     return std::fma(p, q, r);
 }
@@ -99,21 +97,18 @@ template <typename T>
 __device__ __forceinline__ T fma(T p, T q, T r);
 
 template <uint32_t BLOCKSIZE, uint32_t WFSIZE, bool SLEEP, typename T>
-__launch_bounds__(BLOCKSIZE) static __global__
-    void bsrsv_lower_general_device(rocsparse_int mb,
-                                    T             alpha,
-                                    const rocsparse_int* __restrict__ bsr_row_ptr,
-                                    const rocsparse_int* __restrict__ bsr_col_ind,
-                                    const T* __restrict__ bsr_val,
-                                    rocsparse_int block_dim,
-                                    const T* __restrict__ x,
-                                    T* __restrict__ y,
-                                    int* __restrict__ done_array,
-                                    rocsparse_int* __restrict__ map,
-                                    rocsparse_int* __restrict__ zero_pivot,
-                                    rocsparse_index_base idx_base,
-                                    rocsparse_diag_type  diag_type,
-                                    rocsparse_direction  dir)
+static __device__ __forceinline__
+void bsrsv_lower_general_device(rocsparse_int mb,
+                                T             alpha,
+                                const rocsparse_int* __restrict__ bsr_row_ptr,
+                                const rocsparse_int* __restrict__ bsr_col_ind,
+                                const T* __restrict__ bsr_val,
+                                rocsparse_int block_dim,
+                                const T* __restrict__ x,
+                                T* __restrict__ y,
+                                int* __restrict__ done_array,
+                                rocsparse_int* __restrict__ map,
+                                rocsparse_int* __restrict__ zero_pivot)
 {
     const int lid = hipThreadIdx_x & (WFSIZE - 1);
     const int wid = hipThreadIdx_x / WFSIZE;
@@ -131,8 +126,8 @@ __launch_bounds__(BLOCKSIZE) static __global__
     const rocsparse_int row = map[idx];
 
     // Current row entry and exit point
-    const rocsparse_int row_begin = bsr_row_ptr[row] - idx_base;
-    const rocsparse_int row_end   = bsr_row_ptr[row + 1] - idx_base;
+    const rocsparse_int row_begin = bsr_row_ptr[row];
+    const rocsparse_int row_end   = bsr_row_ptr[row + 1];
 
     // Initialize local_col with mb
     rocsparse_int local_col = mb;
@@ -148,7 +143,7 @@ __launch_bounds__(BLOCKSIZE) static __global__
     for(j = row_begin; j < row_end; ++j)
     {
         // Current column index
-        local_col = bsr_col_ind[j] - idx_base;
+        local_col = bsr_col_ind[j];
 
         // Processing lower triangular
 
@@ -173,7 +168,7 @@ __launch_bounds__(BLOCKSIZE) static __global__
             for(rocsparse_int bj = 0; bj < block_dim; ++bj)
             {
                 local_sum = fma(
-                    bsr_val[BSR_IND(j, bi, bj, dir)], y[local_col * block_dim + bj], local_sum);
+                    bsr_val[BSR_IND(j, bi, bj)], y[local_col * block_dim + bj], local_sum);
             }
 
             // Write local sum to y
@@ -189,9 +184,7 @@ __launch_bounds__(BLOCKSIZE) static __global__
         for(rocsparse_int bi = 0; bi < block_dim; ++bi)
         {
             // Load diagonal matrix entry
-            const T diag = (diag_type == rocsparse_diag_type_non_unit)
-                               ? bsr_val[block_dim * block_dim * j + bi + bi * block_dim]
-                               : static_cast<T>(1);
+            const T diag = bsr_val[block_dim * block_dim * j + bi + bi * block_dim];
 
             // Load result of bi-th BSR row
             T val = y[row * block_dim + bi];
@@ -209,7 +202,7 @@ __launch_bounds__(BLOCKSIZE) static __global__
             // Update remaining non-diagonal entries
             for(rocsparse_int bj = bi + lid + 1; bj < block_dim; bj += WFSIZE)
             {
-                y[row * block_dim + bj] -= val * bsr_val[BSR_IND(j, bj, bi, dir)];
+                y[row * block_dim + bj] -= val * bsr_val[BSR_IND(j, bj, bi)];
             }
         }
     }
@@ -221,10 +214,60 @@ __launch_bounds__(BLOCKSIZE) static __global__
 
         if(pivot == true)
         {
-            atomic_min(zero_pivot, row + idx_base);
+            atomic_min(zero_pivot, row);
         }
     }
 }
+
+template <typename T>
+union const_host_device_scalar
+{
+    T                        value;
+    const T*                 pointer;
+    __forceinline__ __host__ const_host_device_scalar(const T* scalar)
+        : pointer(scalar){};
+    __forceinline__ __host__ const_host_device_scalar(const T& scalar)
+        : value(scalar){};
+};
+
+template <typename T>
+__forceinline__ __host__ const_host_device_scalar<T>
+                        to_const_host_device_scalar(rocsparse_pointer_mode mode, const T* s_)
+{
+    return (mode == rocsparse_pointer_mode_host) ? const_host_device_scalar<T>(*s_)
+                                                    : const_host_device_scalar<T>(s_);
+}
+
+template <uint32_t BLOCKSIZE, uint32_t WFSIZE, bool SLEEP, typename T>
+__launch_bounds__(BLOCKSIZE) static __global__
+void bsrsv_lower_general(rocsparse_int mb,
+            const_host_device_scalar<T> alpha_union,
+                        const rocsparse_int* __restrict__ bsr_row_ptr,
+                        const rocsparse_int* __restrict__ bsr_col_ind,
+                        const T* __restrict__ bsr_val,
+                        rocsparse_int block_dim,
+                        const T* __restrict__ x,
+                        T* __restrict__ y,
+                        int* __restrict__ done_array,
+                        rocsparse_int* __restrict__ map,
+                        rocsparse_int* __restrict__ zero_pivot,
+                        bool                 is_host_mode)
+{
+    const auto alpha = (is_host_mode) ? alpha_union.value : *alpha_union.pointer;
+    bsrsv_lower_general_device<BLOCKSIZE, WFSIZE, SLEEP>(mb,
+                                                        alpha,
+                                                        bsr_row_ptr,
+                                                        bsr_col_ind,
+                                                        bsr_val,
+                                                        block_dim,
+                                                        x,
+                                                        y,
+                                                        done_array,
+                                                        map,
+                                                        zero_pivot);
+}
+
+
 
 template <typename T>
 void testing_bsrsv_bad_arg(const Arguments& arg)
@@ -240,27 +283,8 @@ void testing_bsrsv(const Arguments& arg)
     int                       M         = 10;
     int                       N         = 10;
     int                       nnzb      = 16;
-    rocsparse_operation       trans     = rocsparse_operation_none;
-    rocsparse_direction       dir       = rocsparse_direction_row;
-    rocsparse_analysis_policy apol      = rocsparse_analysis_policy_force;
-    rocsparse_solve_policy    spol      = rocsparse_solve_policy_auto;
 
     T h_alpha = static_cast<T>(1);
-
-    // Create rocsparse handle
-    rocsparse_handle handle;
-    CHECK_ROCSPARSE_ERROR(rocsparse_create_handle(&handle));
-
-    hipStream_t stream;
-    CHECK_ROCSPARSE_ERROR(rocsparse_get_stream(handle, &stream));
-
-    // Create matrix descriptor
-    rocsparse_mat_descr descr;
-    CHECK_ROCSPARSE_ERROR(rocsparse_create_mat_descr(&descr));
-
-    // Create matrix info
-    rocsparse_mat_info info;
-    CHECK_ROCSPARSE_ERROR(rocsparse_create_mat_info(&info));
 
     std::vector<int> hbsr_row_ptr = {0, 3, 6, 11, 13, 16}; // size mb+1
     std::vector<int> hbsr_col_ind = {0, 3, 4, 0, 1, 4, 0, 1, 2, 3, 4, 1, 3, 0, 1, 4}; // size nnzb
@@ -328,68 +352,25 @@ void testing_bsrsv(const Arguments& arg)
     std::cout << "buffer_size: " << buffer_size << std::endl;
     CHECK_HIP_ERROR(hipMalloc((void**)&dbuffer, buffer_size));
 
-    CHECK_ROCSPARSE_ERROR(rocsparse_bsrsv_analysis<T>(handle,
-                                                      dir,
-                                                      trans,
-                                                      mb,
-                                                      nnzb,
-                                                      descr,
-                                                      dbsr_val,
-                                                      dbsr_row_ptr,
-                                                      dbsr_col_ind,
-                                                      block_dim,
-                                                      info,
-                                                      apol,
-                                                      spol,
-                                                      dbuffer));
-    CHECK_HIP_ERROR(hipDeviceSynchronize());
-    std::cout << "GGGG" << std::endl;
-
-    CHECK_ROCSPARSE_ERROR(rocsparse_bsrsv_solve<T>(handle,
-                                                   dir,
-                                                   trans,
-                                                   mb,
-                                                   nnzb,
-                                                   &h_alpha,
-                                                   descr,
-                                                   dbsr_val,
-                                                   dbsr_row_ptr,
-                                                   dbsr_col_ind,
-                                                   block_dim,
-                                                   info,
-                                                   dx,
-                                                   dy,
-                                                   spol,
-                                                   dbuffer));
-
-    // hipLaunchKernelGGL((bsrsv_lower_general_device<256, 32, false, T>),
-    //                    dim3((32 * mb - 1) / 256 + 1),
-    //                    dim3(256),
-    //                    0,
-    //                    stream,
-    //                    mb,
-    //                    h_alpha,
-    //                    dbsr_row_ptr,
-    //                    dbsr_col_ind,
-    //                    dbsr_val,
-    //                    block_dim,
-    //                    dx,
-    //                    dy,
-    //                    ddone_array,
-    //                    drow_map,
-    //                    dzero_pivot,
-    //                    rocsparse_index_base_zero,
-    //                    rocsparse_diag_type_non_unit,
-    //                    rocsparse_direction_row);
+    hipLaunchKernelGGL((bsrsv_lower_general<128, 32, false, T>),
+                    dim3((32 * mb - 1) / 128 + 1),
+                    dim3(128),
+                    0,
+                    0,
+                    mb,
+                    to_const_host_device_scalar(rocsparse_pointer_mode_host, &h_alpha),
+                    dbsr_row_ptr,
+                    dbsr_col_ind,
+                    dbsr_val,
+                    block_dim,
+                    dx,
+                    dy,
+                    ddone_array,
+                    drow_map,
+                    dzero_pivot,
+                    true);
     CHECK_HIP_ERROR(hipDeviceSynchronize());
     std::cout << "IIII" << std::endl;
-
-    // Clear bsrsv meta data
-    CHECK_ROCSPARSE_ERROR(rocsparse_bsrsv_clear(handle, info));
-
-    CHECK_ROCSPARSE_ERROR(rocsparse_destroy_handle(handle));
-    CHECK_ROCSPARSE_ERROR(rocsparse_destroy_mat_descr(descr));
-    CHECK_ROCSPARSE_ERROR(rocsparse_destroy_mat_info(info));
 
     // Free buffer
     CHECK_HIP_ERROR(hipFree(dbuffer));
