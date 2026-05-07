@@ -1,6 +1,6 @@
 /*! \file */
 /* ************************************************************************
- * Copyright (C) 2019-2025 Advanced Micro Devices, Inc. All rights Reserved.
+ * Copyright (C) 2019-2026 Advanced Micro Devices, Inc. All rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -26,9 +26,9 @@
 
 #include "rocsparse_math.hpp"
 
+#include <array>
 #include <random>
 #include <type_traits>
-#include <vector>
 
 using rocsparse_rng_t = std::mt19937;
 
@@ -38,28 +38,26 @@ namespace rocsparse
     {
     private:
         rng_t();
-        ~rng_t()            = default;
-        rng_t(const rng_t&) = delete;
+        ~rng_t()                       = default;
+        rng_t(const rng_t&)            = delete;
         rng_t& operator=(const rng_t&) = delete;
+
+        static constexpr size_t s_rand_cache_size = 1024;
 
         rocsparse_rng_t m_rng;
         rocsparse_rng_t m_rng_nan;
         rocsparse_rng_t m_rng_seed;
 
-        int32_t             m_rand_uniform_idx;
-        int32_t             m_rand_normal_idx;
-        std::vector<double> m_rand_uniform_cache;
-        std::vector<double> m_rand_normal_cache;
+        int32_t                               m_rand_uniform_idx = 0;
+        int32_t                               m_rand_normal_idx  = 0;
+        std::array<double, s_rand_cache_size> m_rand_uniform_cache;
+        std::array<double, s_rand_cache_size> m_rand_normal_cache;
 
         double uniform_double(double a, double b);
         double normal_double();
 
     public:
-        static rng_t& Instance()
-        {
-            static rng_t instance;
-            return instance;
-        }
+        static rng_t& Instance();
 
         void reset_seed();
 
@@ -75,9 +73,17 @@ namespace rocsparse
         template <typename T>
         T generator(T a, T b);
 
+        /*! \brief  generate an exact random number in range [a,b]*/
+        template <typename T>
+        T generator_exact(int a, int b);
+
         /*! \brief  generate a random number in range [a,b] from a predetermined finite cache*/
         template <typename T>
         T cached_generator(T a, T b);
+
+        /*! \brief  generate an exact random number in range [a,b] from a predetermined finite cache*/
+        template <typename T>
+        T cached_generator_exact(int a, int b);
 
         /*! \brief generate a random normally distributed number around 0 with stddev 1 from a predetermined finite cache */
         template <typename T>
@@ -95,7 +101,7 @@ namespace rocsparse
 template <typename T>
 T random_generator_exact(int a = 1, int b = 10);
 
-/*! \brief  generate a random number in range [a,b]*/
+// /*! \brief  generate a random number in range [a,b]*/
 template <typename T, typename std::enable_if_t<std::is_integral<T>::value, bool> = true>
 T random_generator(T a = static_cast<T>(1), T b = static_cast<T>(10));
 
