@@ -83,8 +83,8 @@ extern "C" {
 *  \retval rocsparse_status_memory_error the buffer for the dot product reduction
 *          could not be allocated.
 *  \retval rocsparse_status_internal_error an internal error occurred.
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_cdotci(rocsparse_handle               handle,
                                   rocsparse_int                  nnz,

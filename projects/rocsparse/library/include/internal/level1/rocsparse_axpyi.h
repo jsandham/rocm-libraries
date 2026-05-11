@@ -88,8 +88,8 @@ extern "C" {
 *
 *  \par Example
 *  \snippet example_rocsparse_axpyi.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_saxpyi(rocsparse_handle     handle,
                                   rocsparse_int        nnz,

@@ -123,8 +123,8 @@ rocsparse_status rocsparse_hyb2csr_buffer_size(rocsparse_handle          handle,
 *  \par Example
 *  This example converts a HYB matrix into a CSR matrix.
 *  \snippet example_rocsparse_hyb2csr.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_shyb2csr(rocsparse_handle          handle,
                                     const rocsparse_mat_descr descr,

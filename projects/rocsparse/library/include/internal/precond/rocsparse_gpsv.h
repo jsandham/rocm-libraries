@@ -80,8 +80,8 @@ extern "C" {
 *  \retval     rocsparse_status_invalid_pointer \p ds, \p dl, \p d, \p du, \p dw, \p x,
 *              or \p temp_buffer pointer is invalid.
 *  \retval     rocsparse_status_internal_error an internal error occurred.
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sgpsv_interleaved_batch_buffer_size(rocsparse_handle handle,
                                                                rocsparse_gpsv_interleaved_alg alg,
@@ -247,8 +247,8 @@ rocsparse_status rocsparse_zgpsv_interleaved_batch_buffer_size(rocsparse_handle 
 *
 *  \par Example
 *  \snippet example_rocsparse_gpsv.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sgpsv_interleaved_batch(rocsparse_handle               handle,
                                                    rocsparse_gpsv_interleaved_alg alg,

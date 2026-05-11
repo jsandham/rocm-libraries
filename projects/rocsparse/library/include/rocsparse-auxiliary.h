@@ -700,8 +700,8 @@ rocsparse_status rocsparse_destroy_color_info(rocsparse_color_info info);
  *  \retval rocsparse_status_invalid_pointer if \p descr, \p indices, or \p values is invalid.
  *  \retval rocsparse_status_invalid_size if \p size or \p nnz is invalid.
  *  \retval rocsparse_status_invalid_value if \p idx_type, \p idx_base, or \p data_type is invalid.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_create_spvec_descr(rocsparse_spvec_descr* descr,
                                               int64_t                size,
@@ -766,8 +766,8 @@ rocsparse_status rocsparse_destroy_spvec_descr(rocsparse_const_spvec_descr descr
  *  \retval rocsparse_status_invalid_pointer if \p descr, \p indices, or \p values is invalid.
  *  \retval rocsparse_status_invalid_size if \p size or \p nnz is invalid.
  *  \retval rocsparse_status_invalid_value if \p idx_type, \p idx_base, or \p data_type is invalid.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_spvec_get(const rocsparse_spvec_descr descr,
                                      int64_t*                    size,
@@ -815,8 +815,8 @@ rocsparse_status rocsparse_spvec_get_index_base(rocsparse_const_spvec_descr desc
  *
  *  \retval rocsparse_status_success the operation completed successfully.
  *  \retval rocsparse_status_invalid_pointer if \p descr or \p values is invalid.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_spvec_get_values(const rocsparse_spvec_descr descr, void** values);
 
@@ -871,8 +871,8 @@ rocsparse_status rocsparse_spvec_set_values(rocsparse_spvec_descr descr, void* v
  *  \retval rocsparse_status_invalid_pointer if \p descr, \p coo_row_ind, \p coo_col_ind, or \p coo_val is invalid.
  *  \retval rocsparse_status_invalid_size if \p rows, \p cols, or \p nnz is invalid.
  *  \retval rocsparse_status_invalid_value if \p idx_type, \p idx_base, or \p data_type is invalid.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_create_coo_descr(rocsparse_spmat_descr* descr,
                                             int64_t                rows,
@@ -978,8 +978,8 @@ rocsparse_status rocsparse_create_coo_aos_descr(rocsparse_spmat_descr* descr,
  *  \retval rocsparse_status_invalid_pointer if \p descr, \p bsr_row_ptr, \p bsr_col_ind, or \p bsr_val is invalid.
  *  \retval rocsparse_status_invalid_size if \p brows, \p bcols, \p bnnz, or \p block_dim is invalid.
  *  \retval rocsparse_status_invalid_value if \p row_ptr_type, \p col_ind_type, \p idx_base, \p data_type, or \p block_dir is invalid.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_create_bsr_descr(rocsparse_spmat_descr* descr,
                                             int64_t                brows,
@@ -1045,8 +1045,8 @@ rocsparse_status rocsparse_create_const_bsr_descr(rocsparse_const_spmat_descr* d
  *  \retval rocsparse_status_invalid_pointer if \p descr, \p csr_row_ptr, \p csr_col_ind, or \p csr_val is invalid.
  *  \retval rocsparse_status_invalid_size if \p rows, \p cols, or \p nnz is invalid.
  *  \retval rocsparse_status_invalid_value if \p row_ptr_type, \p col_ind_type, \p idx_base, or \p data_type is invalid.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_create_csr_descr(rocsparse_spmat_descr* descr,
                                             int64_t                rows,
@@ -1108,8 +1108,8 @@ rocsparse_status rocsparse_create_const_csr_descr(rocsparse_const_spmat_descr* d
  *  \retval rocsparse_status_invalid_pointer if \p descr, \p csc_col_ptr, \p csc_row_ind, or \p csc_val is invalid.
  *  \retval rocsparse_status_invalid_size if \p rows, \p cols, or \p nnz is invalid.
  *  \retval rocsparse_status_invalid_value if \p col_ptr_type, \p row_ind_type, \p idx_base, or \p data_type is invalid.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_create_csc_descr(rocsparse_spmat_descr* descr,
                                             int64_t                rows,
@@ -1215,8 +1215,8 @@ rocsparse_status rocsparse_create_ell_descr(rocsparse_spmat_descr* descr,
  *  \retval rocsparse_status_invalid_pointer if \p descr, \p ell_cols, \p ell_col_ind, or \p ell_val is invalid.
  *  \retval rocsparse_status_invalid_size if \p rows or \p cols is invalid.
  *  \retval rocsparse_status_invalid_value if \p idx_type, \p idx_base, or \p data_type is invalid.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_create_bell_descr(rocsparse_spmat_descr* descr,
                                              int64_t                rows,
@@ -1284,8 +1284,8 @@ rocsparse_status rocsparse_create_const_bell_descr(rocsparse_const_spmat_descr* 
  *  \retval rocsparse_status_invalid_pointer if \p descr, \p sell_slice_offsets, \p sell_col_ind, or \p sell_val is invalid.
  *  \retval rocsparse_status_invalid_size if \p rows, \p cols, \p nnz, \p sell_slice_size, or \p sell_colval_size is invalid.
  *  \retval rocsparse_status_invalid_value if \p idx_type, \p idx_base, or \p data_type is invalid.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_create_sell_descr(rocsparse_spmat_descr* descr,
                                              int64_t                rows,
@@ -2050,8 +2050,8 @@ rocsparse_status rocsparse_spilu0_get_output(rocsparse_handle        handle,
  *  \retval rocsparse_status_invalid_pointer if \p descr, \p coo_row_ind, \p coo_col_ind, or \p coo_val is invalid.
  *  \retval rocsparse_status_invalid_size if \p rows, \p cols, or \p nnz is invalid.
  *  \retval rocsparse_status_invalid_value if \p idx_type, \p idx_base, or \p data_type is invalid.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_coo_get(const rocsparse_spmat_descr descr,
                                    int64_t*                    rows,
@@ -2106,8 +2106,8 @@ rocsparse_status rocsparse_const_coo_get(rocsparse_const_spmat_descr descr,
  *  \retval rocsparse_status_invalid_pointer if \p descr, \p coo_ind, or \p coo_val is invalid.
  *  \retval rocsparse_status_invalid_size if \p rows, \p cols, or \p nnz is invalid.
  *  \retval rocsparse_status_invalid_value if \p idx_type, \p idx_base, or \p data_type is invalid.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_coo_aos_get(const rocsparse_spmat_descr descr,
                                        int64_t*                    rows,
@@ -2164,8 +2164,8 @@ rocsparse_status rocsparse_const_coo_aos_get(rocsparse_const_spmat_descr descr,
  *  \retval rocsparse_status_invalid_pointer if \p descr, \p csr_row_ptr, \p csr_col_ind, or \p csr_val is invalid.
  *  \retval rocsparse_status_invalid_size if \p rows, \p cols, or \p nnz is invalid.
  *  \retval rocsparse_status_invalid_value if \p row_ptr_type, \p col_ind_type, \p idx_base, or \p data_type is invalid.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_csr_get(const rocsparse_spmat_descr descr,
                                    int64_t*                    rows,
@@ -2226,8 +2226,8 @@ rocsparse_status rocsparse_const_csr_get(rocsparse_const_spmat_descr descr,
  *  \retval rocsparse_status_invalid_pointer if \p descr, \p csc_col_ptr, \p csc_row_ind, or \p csr_val is invalid.
  *  \retval rocsparse_status_invalid_size if \p rows, \p cols, or \p nnz is invalid.
  *  \retval rocsparse_status_invalid_value if \p col_ptr_type, \p row_ind_type, \p idx_base, or \p data_type is invalid.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_csc_get(const rocsparse_spmat_descr descr,
                                    int64_t*                    rows,
@@ -2284,8 +2284,8 @@ rocsparse_status rocsparse_const_csc_get(rocsparse_const_spmat_descr descr,
  *  \retval rocsparse_status_invalid_pointer if \p descr, \p ell_col_ind, or \p ell_val is invalid.
  *  \retval rocsparse_status_invalid_size if \p rows, \p cols, or \p ell_width is invalid.
  *  \retval rocsparse_status_invalid_value if \p idx_type, \p idx_base, or \p data_type is invalid.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_ell_get(const rocsparse_spmat_descr descr,
                                    int64_t*                    rows,
@@ -2341,8 +2341,8 @@ rocsparse_status rocsparse_const_ell_get(rocsparse_const_spmat_descr descr,
  *  \retval rocsparse_status_invalid_pointer if \p descr, \p ell_cols, \p ell_col_ind, or \p ell_val is invalid.
  *  \retval rocsparse_status_invalid_size if \p rows, \p cols, or \p ell_block_dim is invalid.
  *  \retval rocsparse_status_invalid_value if \p ell_block_dir, \p idx_type, \p idx_base, or \p data_type is invalid.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_bell_get(const rocsparse_spmat_descr descr,
                                     int64_t*                    rows,
@@ -2408,8 +2408,8 @@ rocsparse_status rocsparse_const_bell_get(rocsparse_const_spmat_descr descr,
  *  \retval rocsparse_status_invalid_pointer if \p descr, \p sell_slice_offsets, \p sell_col_ind, or \p sell_val is invalid.
  *  \retval rocsparse_status_invalid_size if \p rows, \p cols, \p nnz, \p sell_colval_size, or \p sell_slice_size is invalid.
  *  \retval rocsparse_status_invalid_value if \p sell_slice_offsets_type, \p sell_col_ind_type, \p idx_base, or \p data_type is invalid.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sell_get(const rocsparse_spmat_descr descr,
                                     int64_t*                    rows,
@@ -2479,8 +2479,8 @@ rocsparse_status rocsparse_const_sell_get(rocsparse_const_spmat_descr descr,
  *          \p block_dir, \p block_dim, \p bsr_row_ptr, \p bsr_col_ind, \p bsr_val,
  *          \p row_ptr_type, \p col_ind_type, \p idx_base, or \p data_type is invalid.
  *  \retval rocsparse_status_not_initialized if \p descr has not been initialized.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_bsr_get(const rocsparse_spmat_descr descr,
                                    int64_t*                    brows,
@@ -2696,8 +2696,8 @@ rocsparse_status rocsparse_spmat_get_index_base(rocsparse_const_spmat_descr desc
  *
  *  \retval rocsparse_status_success the operation completed successfully.
  *  \retval rocsparse_status_invalid_pointer if \p descr or \p values is invalid.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_spmat_get_values(rocsparse_spmat_descr descr, void** values);
 
@@ -2918,8 +2918,8 @@ rocsparse_status rocsparse_spmat_set_attribute(rocsparse_spmat_descr     descr,
  *  \retval rocsparse_status_invalid_pointer if \p descr or \p values is invalid.
  *  \retval rocsparse_status_invalid_size if \p size is invalid.
  *  \retval rocsparse_status_invalid_value if \p data_type is invalid.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_create_dnvec_descr(rocsparse_dnvec_descr* descr,
                                               int64_t                size,
@@ -2968,8 +2968,8 @@ rocsparse_status rocsparse_destroy_dnvec_descr(rocsparse_const_dnvec_descr descr
  *  \retval rocsparse_status_invalid_pointer if \p descr or \p values is invalid.
  *  \retval rocsparse_status_invalid_size if \p size is invalid.
  *  \retval rocsparse_status_invalid_value if \p data_type is invalid.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_dnvec_get(const rocsparse_dnvec_descr descr,
                                      int64_t*                    size,
@@ -2993,8 +2993,8 @@ rocsparse_status rocsparse_const_dnvec_get(rocsparse_const_dnvec_descr descr,
  *
  *  \retval rocsparse_status_success the operation completed successfully.
  *  \retval rocsparse_status_invalid_pointer \p descr or \p values is invalid.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_dnvec_get_values(const rocsparse_dnvec_descr descr, void** values);
 
@@ -3044,8 +3044,8 @@ rocsparse_status rocsparse_dnvec_set_values(rocsparse_dnvec_descr descr, void* v
  *  \retval rocsparse_status_invalid_pointer if \p descr or \p values is invalid.
  *  \retval rocsparse_status_invalid_size if \p rows, \p cols, or \p ld is invalid.
  *  \retval rocsparse_status_invalid_value if \p data_type or \p order is invalid.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_create_dnmat_descr(rocsparse_dnmat_descr* descr,
                                               int64_t                rows,
@@ -3105,8 +3105,8 @@ rocsparse_status rocsparse_destroy_dnmat_descr(rocsparse_const_dnmat_descr descr
  *  \retval rocsparse_status_invalid_pointer if \p descr or \p values is invalid.
  *  \retval rocsparse_status_invalid_size if \p rows, \p cols, or \p ld is invalid.
  *  \retval rocsparse_status_invalid_value if \p data_type or \p order is invalid.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_dnmat_get(const rocsparse_dnmat_descr descr,
                                      int64_t*                    rows,
@@ -3137,8 +3137,8 @@ rocsparse_status rocsparse_const_dnmat_get(rocsparse_const_dnmat_descr descr,
  *
  *  \retval rocsparse_status_success the operation completed successfully.
  *  \retval rocsparse_status_invalid_pointer if \p descr or \p values is invalid.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_dnmat_get_values(const rocsparse_dnmat_descr descr, void** values);
 

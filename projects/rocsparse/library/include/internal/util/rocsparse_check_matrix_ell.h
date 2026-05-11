@@ -74,8 +74,8 @@ extern "C" {
 *  \retval rocsparse_status_invalid_size \p m, \p n, or \p ell_width is invalid.
 *  \retval rocsparse_status_invalid_pointer \p ell_val, \p ell_col_ind, or \p buffer_size pointer
 *          is invalid.
+* @{
 */
-/**@{*/
 
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scheck_matrix_ell_buffer_size(rocsparse_handle       handle,
@@ -180,8 +180,8 @@ rocsparse_status rocsparse_zcheck_matrix_ell_buffer_size(rocsparse_handle       
 *  \retval rocsparse_status_invalid_size \p m, \p n, or \p ell_width is invalid.
 *  \retval rocsparse_status_invalid_pointer \p ell_val, \p ell_col_ind, \p temp_buffer, or \p data_status pointer
 *          is invalid.
+* @{
 */
-/**@{*/
 
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scheck_matrix_ell(rocsparse_handle       handle,

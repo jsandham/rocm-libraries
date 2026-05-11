@@ -123,8 +123,8 @@ extern "C" {
 *  \retval     rocsparse_status_not_implemented
 *              \p block_dim==1, \p trans != \ref rocsparse_operation_none or
 *              \ref rocsparse_matrix_type != \ref rocsparse_matrix_type_general.
+* @{
 */
-/**@{*/
 
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sbsrxmv(rocsparse_handle          handle,

@@ -88,8 +88,8 @@ extern "C" {
  *  \retval     rocsparse_status_invalid_pointer \p buffer_size pointer is invalid.
  *  \retval     rocsparse_status_internal_error an internal error occurred.
  *
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status
     rocsparse_sprune_csr2csr_by_percentage_buffer_size(rocsparse_handle          handle,
@@ -181,8 +181,8 @@ rocsparse_status
  *              \p csr_row_ptr_A, \p csr_col_ind_A, \p csr_row_ptr_C, \p nnz_total_dev_host_ptr,
  *              or \p temp_buffer pointer is invalid.
  *
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sprune_csr2csr_nnz_by_percentage(rocsparse_handle          handle,
                                                             rocsparse_int             m,
@@ -301,8 +301,8 @@ rocsparse_status rocsparse_dprune_csr2csr_nnz_by_percentage(rocsparse_handle    
  *
  *  \par Example
  *  \snippet example_rocsparse_prune_csr2csr_by_percentage.cpp doc example
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sprune_csr2csr_by_percentage(rocsparse_handle          handle,
                                                         rocsparse_int             m,

@@ -72,8 +72,8 @@ extern "C" {
 *  \retval     rocsparse_status_invalid_pointer \p dl, \p d, \p du,
 *              \p B, or \p buffer_size pointer is invalid.
 *  \retval     rocsparse_status_internal_error an internal error occurred.
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sgtsv_buffer_size(rocsparse_handle handle,
                                              rocsparse_int    m,
@@ -173,8 +173,8 @@ rocsparse_status rocsparse_zgtsv_buffer_size(rocsparse_handle                han
 *
 *  \par Example
 *  \snippet example_rocsparse_gtsv.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sgtsv(rocsparse_handle handle,
                                  rocsparse_int    m,
@@ -260,8 +260,8 @@ rocsparse_status rocsparse_zgtsv(rocsparse_handle                handle,
 *  \retval     rocsparse_status_invalid_pointer \p dl, \p d, \p du,
 *              \p B, or \p buffer_size pointer is invalid.
 *  \retval     rocsparse_status_internal_error an internal error occurred.
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sgtsv_no_pivot_buffer_size(rocsparse_handle handle,
                                                       rocsparse_int    m,
@@ -361,8 +361,8 @@ rocsparse_status rocsparse_zgtsv_no_pivot_buffer_size(rocsparse_handle          
 *
 *  \par Example
 *  \snippet example_rocsparse_gtsv_no_pivot.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sgtsv_no_pivot(rocsparse_handle handle,
                                           rocsparse_int    m,
@@ -447,8 +447,8 @@ rocsparse_status rocsparse_zgtsv_no_pivot(rocsparse_handle                handle
 *  \retval     rocsparse_status_invalid_pointer \p dl, \p d, \p du,
 *              \p x, or \p buffer_size pointer is invalid.
 *  \retval     rocsparse_status_internal_error an internal error occurred.
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sgtsv_no_pivot_strided_batch_buffer_size(rocsparse_handle handle,
                                                                     rocsparse_int    m,
@@ -585,8 +585,8 @@ rocsparse_status
 *
 *  \par Example
 *  \snippet example_rocsparse_gtsv_no_pivot_strided_batch.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sgtsv_no_pivot_strided_batch(rocsparse_handle handle,
                                                         rocsparse_int    m,
@@ -676,8 +676,8 @@ rocsparse_status rocsparse_zgtsv_no_pivot_strided_batch(rocsparse_handle        
 *  \retval     rocsparse_status_invalid_pointer \p dl, \p d, \p du,
 *              \p x, or \p buffer_size pointer is invalid.
 *  \retval     rocsparse_status_internal_error an internal error occurred.
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sgtsv_interleaved_batch_buffer_size(rocsparse_handle handle,
                                                                rocsparse_gtsv_interleaved_alg alg,
@@ -827,8 +827,8 @@ rocsparse_status rocsparse_zgtsv_interleaved_batch_buffer_size(rocsparse_handle 
 *
 *  \par Example
 *  \snippet example_rocsparse_gtsv_interleaved_batch.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sgtsv_interleaved_batch(rocsparse_handle               handle,
                                                    rocsparse_gtsv_interleaved_alg alg,

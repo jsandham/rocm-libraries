@@ -115,8 +115,8 @@ rocsparse_status rocsparse_csritsv_zero_pivot(rocsparse_handle          handle,
 *  \retval     rocsparse_status_internal_error an internal error occurred.
 *  \retval     rocsparse_status_not_implemented
 *              \ref rocsparse_matrix_type != \ref rocsparse_matrix_type_general and \ref rocsparse_matrix_type != \ref rocsparse_matrix_type_triangular.
+* @{
 */
-/**@{*/
 
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scsritsv_buffer_size(rocsparse_handle          handle,
@@ -226,8 +226,8 @@ rocsparse_status rocsparse_zcsritsv_buffer_size(rocsparse_handle                
 *  \retval     rocsparse_status_internal_error an internal error occurred.
 *  \retval     rocsparse_status_not_implemented
 *              \ref rocsparse_matrix_type != \ref rocsparse_matrix_type_general and \ref rocsparse_matrix_type != \ref rocsparse_matrix_type_triangular.
+* @{
 */
-/**@{*/
 
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scsritsv_analysis(rocsparse_handle          handle,
@@ -522,8 +522,8 @@ rocsparse_status rocsparse_csritsv_clear(rocsparse_handle          handle,
 *      rocsparse_destroy_mat_descr(descr);
 *      rocsparse_destroy_handle(handle);
 *  \endcode
+* @{
 */
-/**@{*/
 
 __attribute__((deprecated("This function is deprecated and will be removed in a future release. "
                           "Use rocsparse_scsritsv_solve_ex instead.")))
@@ -821,8 +821,8 @@ ROCSPARSE_EXPORT rocsparse_status
 *      rocsparse_destroy_mat_descr(descr);
 *      rocsparse_destroy_handle(handle);
 *  \endcode
+* @{
 */
-/**@{*/
 
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scsritsv_solve_ex(rocsparse_handle          handle,

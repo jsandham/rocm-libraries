@@ -76,8 +76,8 @@ extern "C" {
 *  \retval     rocsparse_status_invalid_pointer \p bsr_row_ptr, \p bsr_col_ind, or
 *              \p p_buffer_size pointer is invalid.
 *  \retval     rocsparse_status_internal_error an internal error occurred.
+* @{
 */
-/**@{*/
 
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sgebsr2gebsc_buffer_size(rocsparse_handle     handle,
@@ -203,8 +203,8 @@ rocsparse_status rocsparse_zgebsr2gebsc_buffer_size(rocsparse_handle            
 *  \par Example
 *  This example computes the transpose of a general BSR matrix.
 *  \snippet example_rocsparse_gebsr2gebsc.cpp doc example
+* @{
 */
-/**@{*/
 
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sgebsr2gebsc(rocsparse_handle     handle,

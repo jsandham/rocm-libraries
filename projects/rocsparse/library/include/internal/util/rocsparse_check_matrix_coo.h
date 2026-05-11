@@ -75,8 +75,8 @@ extern "C" {
 *  \retval rocsparse_status_invalid_size \p m, \p n, or \p nnz is invalid.
 *  \retval rocsparse_status_invalid_pointer \p coo_val, \p coo_row_ind, \p coo_col_ind, or \p buffer_size pointer
 *          is invalid.
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scheck_matrix_coo_buffer_size(rocsparse_handle       handle,
                                                          rocsparse_int          m,
@@ -247,8 +247,8 @@ rocsparse_status rocsparse_zcheck_matrix_coo_buffer_size(rocsparse_handle       
 *   hipFree(dcoo_col_ind);
 *   hipFree(dcoo_val);
 *  \endcode
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scheck_matrix_coo(rocsparse_handle       handle,
                                              rocsparse_int          m,

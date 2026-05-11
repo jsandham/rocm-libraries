@@ -84,8 +84,8 @@ extern "C" {
 *  \retval     rocsparse_status_not_implemented if \ref rocsparse_matrix_type is not one of
 *              \ref rocsparse_matrix_type_general, \ref rocsparse_matrix_type_symmetric, or
 *              \ref rocsparse_matrix_type_triangular.
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scsrmv_analysis(rocsparse_handle          handle,
                                            rocsparse_operation       trans,
@@ -280,8 +280,8 @@ rocsparse_status rocsparse_csrmv_clear(rocsparse_handle handle, rocsparse_mat_in
 *  This example performs a sparse matrix vector multiplication in CSR format
 *  using additional meta data to improve performance.
 *  \snippet example_rocsparse_csrmv.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scsrmv(rocsparse_handle          handle,
                                   rocsparse_operation       trans,

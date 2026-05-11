@@ -80,8 +80,8 @@ extern "C" {
 *  \retval rocsparse_status_invalid_handle the library context was not initialized.
 *  \retval rocsparse_status_invalid_size \p m or \p nnz is invalid.
 *  \retval rocsparse_status_invalid_pointer \p descr, \p csr_val, \p csr_row_ptr, \p csr_col_ind, \p fraction_to_color, \p ncolors, \p coloring, or \p info pointer is invalid.
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scsrcolor(rocsparse_handle          handle,
                                      rocsparse_int             m,

@@ -65,8 +65,8 @@ extern "C" {
  *  \retval     rocsparse_status_not_implemented
  *              \p trans != \ref rocsparse_operation_none or
  *              \ref rocsparse_matrix_type != \ref rocsparse_matrix_type_general.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sgemvi_buffer_size(rocsparse_handle    handle,
                                               rocsparse_operation trans,
@@ -176,8 +176,8 @@ rocsparse_status rocsparse_zgemvi_buffer_size(rocsparse_handle    handle,
  *
  *  \par Example
  *  \snippet example_rocsparse_gemvi.cpp doc example
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sgemvi(rocsparse_handle     handle,
                                   rocsparse_operation  trans,

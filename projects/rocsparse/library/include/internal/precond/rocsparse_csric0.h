@@ -211,8 +211,8 @@ rocsparse_status rocsparse_csric0_get_tolerance(rocsparse_handle   handle,
 *  \retval     rocsparse_status_internal_error an internal error occurred.
 *  \retval     rocsparse_status_not_implemented
 *              \ref rocsparse_matrix_type != \ref rocsparse_matrix_type_general.
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scsric0_buffer_size(rocsparse_handle          handle,
                                                rocsparse_int             m,
@@ -318,8 +318,8 @@ rocsparse_status rocsparse_zcsric0_buffer_size(rocsparse_handle                h
 *  \retval     rocsparse_status_internal_error an internal error occurred.
 *  \retval     rocsparse_status_not_implemented
 *              \ref rocsparse_matrix_type != \ref rocsparse_matrix_type_general.
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scsric0_analysis(rocsparse_handle          handle,
                                             rocsparse_int             m,
@@ -562,8 +562,8 @@ rocsparse_status rocsparse_csric0_clear(rocsparse_handle handle, rocsparse_mat_i
 *  storage format. The following example computes the incomplete Cholesky factorization
 *  \f$M \approx LL^T\f$ and solves the preconditioned system \f$My = x\f$.
 *  \snippet example_rocsparse_csric0.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scsric0(rocsparse_handle          handle,
                                    rocsparse_int             m,

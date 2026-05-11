@@ -261,8 +261,8 @@ extern "C" {
 *  \par Example
 *  An example of the first batch mode (\f$C_i = A \times B_i\f$) is provided below.
 *  \snippet example_rocsparse_spmm_batched.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_spmm(rocsparse_handle            handle,
                                 rocsparse_operation         trans_A,

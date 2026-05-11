@@ -78,8 +78,8 @@ extern "C" {
 *              invalid.
 *  \retval     rocsparse_status_invalid_pointer \p bsr_descr, \p bsr_val,
 *              \p bsr_row_ind, or \p bsr_col_ind pointer is invalid.
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sbsrpad_value(rocsparse_handle          handle,
                                          rocsparse_int             m,

@@ -107,8 +107,8 @@ rocsparse_status rocsparse_bsrilu0_zero_pivot(rocsparse_handle   handle,
  *  \retval     rocsparse_status_invalid_pointer \p info, \p tol, or \p boost_val pointer
  *              is invalid.
  *  \retval     rocsparse_status_internal_error an internal error occurred.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sbsrilu0_numeric_boost(rocsparse_handle   handle,
                                                   rocsparse_mat_info info,
@@ -205,8 +205,8 @@ rocsparse_status rocsparse_dcbsrilu0_numeric_boost(rocsparse_handle             
  *  \retval     rocsparse_status_internal_error an internal error occurred.
  *  \retval     rocsparse_status_not_implemented
  *              \ref rocsparse_matrix_type != \ref rocsparse_matrix_type_general.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sbsrilu0_buffer_size(rocsparse_handle          handle,
                                                 rocsparse_direction       dir,
@@ -324,8 +324,8 @@ rocsparse_status rocsparse_zbsrilu0_buffer_size(rocsparse_handle                
  *  \retval     rocsparse_status_internal_error an internal error occurred.
  *  \retval     rocsparse_status_not_implemented
  *              \ref rocsparse_matrix_type != \ref rocsparse_matrix_type_general.
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sbsrilu0_analysis(rocsparse_handle          handle,
                                              rocsparse_direction       dir,
@@ -491,8 +491,8 @@ rocsparse_status rocsparse_bsrilu0_clear(rocsparse_handle handle, rocsparse_mat_
  *  storage format. The following example computes the incomplete LU factorization
  *  \f$M \approx LU\f$ and solves the preconditioned system \f$My = x\f$.
  *  \snippet example_rocsparse_bsrilu0.cpp doc example
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sbsrilu0(rocsparse_handle          handle,
                                     rocsparse_direction       dir,

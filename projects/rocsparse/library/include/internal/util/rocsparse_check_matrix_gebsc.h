@@ -82,8 +82,8 @@ extern "C" {
 *  \retval rocsparse_status_invalid_size \p mb, \p nb, \p nnzb, \p row_block_dim, or \p col_block_dim is invalid.
 *  \retval rocsparse_status_invalid_pointer \p bsc_val, \p bsc_col_ptr, \p bsc_row_ind, or \p buffer_size pointer
 *          is invalid.
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scheck_matrix_gebsc_buffer_size(rocsparse_handle       handle,
                                                            rocsparse_direction    dir,
@@ -212,8 +212,8 @@ rocsparse_status rocsparse_zcheck_matrix_gebsc_buffer_size(rocsparse_handle    h
 *  \retval rocsparse_status_invalid_size \p mb, \p nb, \p nnzb, \p row_block_dim, or \p col_block_dim is invalid.
 *  \retval rocsparse_status_invalid_pointer \p bsc_val, \p bsc_col_ptr, \p bsc_row_ind, \p temp_buffer, or \p data_status pointer
 *          is invalid.
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scheck_matrix_gebsc(rocsparse_handle       handle,
                                                rocsparse_direction    dir,

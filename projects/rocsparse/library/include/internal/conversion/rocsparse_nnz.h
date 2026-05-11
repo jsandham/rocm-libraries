@@ -71,8 +71,8 @@ extern "C" {
 *
 *  \par Example
 *  \snippet example_rocsparse_nnz.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_snnz(rocsparse_handle          handle,
                                 rocsparse_direction       dir,

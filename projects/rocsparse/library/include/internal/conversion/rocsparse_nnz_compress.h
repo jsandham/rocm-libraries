@@ -77,8 +77,8 @@ extern "C" {
 *
 *  \par Example
 *  \snippet example_rocsparse_nnz_compress.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_snnz_compress(rocsparse_handle          handle,
                                          rocsparse_int             m,

@@ -98,8 +98,8 @@ extern "C" {
  *  \par Example
  *  This example demonstrates how to compress a CSR matrix.
  *  \snippet example_rocsparse_csr2csr_compress.cpp doc example
+ * @{
  */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scsr2csr_compress(rocsparse_handle          handle,
                                              rocsparse_int             m,

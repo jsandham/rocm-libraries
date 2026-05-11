@@ -124,8 +124,8 @@ extern "C" {
 *          \p trans_A != \ref rocsparse_operation_none,
 *          \p trans_B != \ref rocsparse_operation_none, or
 *          \p rocsparse_matrix_type != \ref rocsparse_matrix_type_general.
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scsrgemm_buffer_size(rocsparse_handle          handle,
                                                 rocsparse_operation       trans_A,
@@ -636,8 +636,8 @@ rocsparse_status rocsparse_csrgemm_nnz(rocsparse_handle          handle,
 *                     info_C,
 *                     buffer);
 *  \endcode
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scsrgemm(rocsparse_handle          handle,
                                     rocsparse_operation       trans_A,
@@ -1010,8 +1010,8 @@ rocsparse_status rocsparse_zcsrgemm(rocsparse_handle                handle,
 *                     info_C,
 *                     buffer);
 *  \endcode
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_csrgemm_symbolic(rocsparse_handle          handle,
                                             rocsparse_operation       trans_A,
@@ -1337,8 +1337,8 @@ rocsparse_status rocsparse_csrgemm_symbolic(rocsparse_handle          handle,
 *                     info_C,
 *                     buffer);
 *  \endcode
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scsrgemm_numeric(rocsparse_handle          handle,
                                             rocsparse_operation       trans_A,

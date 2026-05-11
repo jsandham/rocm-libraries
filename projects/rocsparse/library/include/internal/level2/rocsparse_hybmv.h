@@ -98,8 +98,8 @@ extern "C" {
 *  This example performs a sparse matrix vector multiplication in HYB format and
 *  demonstrates a conversion from the CSR to HYB format.
 *  \snippet example_rocsparse_hybmv.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_shybmv(rocsparse_handle          handle,
                                   rocsparse_operation       trans,

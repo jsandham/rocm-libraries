@@ -96,8 +96,8 @@ extern "C" {
 *  \par Example
 *  This example converts a BSR matrix into an CSR matrix.
 *  \snippet example_rocsparse_bsr2csr.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sbsr2csr(rocsparse_handle          handle,
                                     rocsparse_direction       dir,

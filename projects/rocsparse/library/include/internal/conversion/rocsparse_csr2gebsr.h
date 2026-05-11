@@ -85,8 +85,8 @@ extern "C" {
 *  \retval     rocsparse_status_invalid_size \p m, \p n, \p row_block_dim, or \p col_block_dim is invalid.
 *  \retval     rocsparse_status_invalid_pointer \p csr_val, \p csr_row_ptr, \p csr_col_ind, or \p buffer_size
 *              pointer is invalid.
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scsr2gebsr_buffer_size(rocsparse_handle          handle,
                                                   rocsparse_direction       dir,
@@ -192,8 +192,8 @@ rocsparse_status rocsparse_zcsr2gebsr_buffer_size(rocsparse_handle              
 *  \retval     rocsparse_status_invalid_size \p m, \p n, \p row_block_dim, or \p col_block_dim is invalid.
 *  \retval     rocsparse_status_invalid_pointer \p csr_row_ptr, \p csr_col_ind, \p bsr_row_ptr, or \p bsr_nnz_devhost
 *              pointer is invalid.
+* @{
 */
-/**@{*/
 
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_csr2gebsr_nnz(rocsparse_handle          handle,
@@ -287,8 +287,8 @@ rocsparse_status rocsparse_csr2gebsr_nnz(rocsparse_handle          handle,
 *  \par Example
 *  This example converts a CSR matrix into an BSR matrix.
 *  \snippet example_rocsparse_csr2gebsr.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scsr2gebsr(rocsparse_handle          handle,
                                       rocsparse_direction       dir,

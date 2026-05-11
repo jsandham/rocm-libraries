@@ -77,8 +77,8 @@ extern "C" {
 *
 *  \par Example
 *  \snippet example_rocsparse_sctr.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_ssctr(rocsparse_handle     handle,
                                  rocsparse_int        nnz,

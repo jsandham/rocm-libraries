@@ -90,8 +90,8 @@ extern "C" {
 *  \retval     rocsparse_status_not_implemented
 *              \p trans != \ref rocsparse_operation_none or
 *              \ref rocsparse_matrix_type != \ref rocsparse_matrix_type_general.
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sbsrmv_analysis(rocsparse_handle          handle,
                                            rocsparse_direction       dir,
@@ -252,8 +252,8 @@ rocsparse_status rocsparse_zbsrmv_analysis(rocsparse_handle                handl
 *  \par Example
 *  This example performs a sparse matrix vector multiplication in BSR format.
 *  \snippet example_rocsparse_bsrmv.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sbsrmv(rocsparse_handle          handle,
                                   rocsparse_direction       dir,

@@ -126,8 +126,8 @@ extern "C" {
 *          \p trans_A != \ref rocsparse_operation_none,
 *          \p trans_B != \ref rocsparse_operation_none, or
 *          \p rocsparse_matrix_type != \ref rocsparse_matrix_type_general.
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sbsrgemm_buffer_size(rocsparse_handle          handle,
                                                 rocsparse_direction       dir,
@@ -524,8 +524,8 @@ rocsparse_status rocsparse_bsrgemm_nnzb(rocsparse_handle          handle,
 *  This example multiplies two BSR matrices with a scalar alpha and adds the result to
 *  another BSR matrix.
 *  \snippet example_rocsparse_bsrgemm.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sbsrgemm(rocsparse_handle          handle,
                                     rocsparse_direction       dir,

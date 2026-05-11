@@ -262,8 +262,8 @@ rocsparse_status rocsparse_csritilu0_preprocess(rocsparse_handle     handle,
 *
 *  \par Example
 *  \include example_rocsparse_csritilu0.cpp
+* @{
 */
-/**@{*/
 __attribute__((deprecated("This function is deprecated and will be removed in a future release. "
                           "Use rocsparse_scsritilu0_compute_ex instead.")))
 ROCSPARSE_EXPORT rocsparse_status
@@ -422,8 +422,8 @@ ROCSPARSE_EXPORT rocsparse_status
 *              or \p csr_col_ind pointer is invalid.
 *  \retval     rocsparse_status_internal_error an internal error occurred.
 *
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scsritilu0_compute_ex(rocsparse_handle     handle,
                                                  rocsparse_itilu0_alg alg,
@@ -567,8 +567,8 @@ rocsparse_status rocsparse_zcsritilu0_compute_ex(rocsparse_handle               
 *  \retval     rocsparse_status_invalid_pointer \p niter or \p data is invalid.
 *  \retval     rocsparse_status_internal_error an internal error occurred.
 *
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scsritilu0_history(rocsparse_handle     handle,
                                               rocsparse_itilu0_alg alg,

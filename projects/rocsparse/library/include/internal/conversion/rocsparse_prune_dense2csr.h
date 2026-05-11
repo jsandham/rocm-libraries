@@ -76,8 +76,8 @@ extern "C" {
 *  \retval     rocsparse_status_invalid_handle the library context was not initialized.
 *  \retval     rocsparse_status_invalid_pointer \p buffer_size pointer is invalid.
 *  \retval     rocsparse_status_internal_error an internal error occurred.
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sprune_dense2csr_buffer_size(rocsparse_handle          handle,
                                                         rocsparse_int             m,
@@ -144,8 +144,8 @@ rocsparse_status rocsparse_dprune_dense2csr_buffer_size(rocsparse_handle        
 *  \retval     rocsparse_status_invalid_size \p m, \p n, or \p lda is invalid.
 *  \retval     rocsparse_status_invalid_pointer \p A, \p threshold, \p descr, \p csr_row_ptr,
 *              \p nnz_total_dev_host_ptr, or \p temp_buffer pointer is invalid.
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sprune_dense2csr_nnz(rocsparse_handle          handle,
                                                 rocsparse_int             m,
@@ -228,8 +228,8 @@ rocsparse_status rocsparse_dprune_dense2csr_nnz(rocsparse_handle          handle
 *
 *  \par Example
 *  \snippet example_rocsparse_prune_dense2csr.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sprune_dense2csr(rocsparse_handle          handle,
                                             rocsparse_int             m,

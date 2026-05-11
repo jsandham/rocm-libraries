@@ -123,8 +123,8 @@ extern "C" {
 *  This example performs a sparse matrix vector multiplication in ELL format. It also shows how to convert
 *  from CSR to ELL format.
 *  \snippet example_rocsparse_ellmv.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sellmv(rocsparse_handle          handle,
                                   rocsparse_operation       trans,

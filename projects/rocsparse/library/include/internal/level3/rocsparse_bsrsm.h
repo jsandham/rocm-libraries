@@ -126,8 +126,8 @@ rocsparse_status rocsparse_bsrsm_zero_pivot(rocsparse_handle   handle,
 *              \p trans_A == \ref rocsparse_operation_conjugate_transpose,
 *              \p trans_X == \ref rocsparse_operation_conjugate_transpose, or
 *              \ref rocsparse_matrix_type != \ref rocsparse_matrix_type_general.
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sbsrsm_buffer_size(rocsparse_handle          handle,
                                               rocsparse_direction       dir,
@@ -264,8 +264,8 @@ rocsparse_status rocsparse_zbsrsm_buffer_size(rocsparse_handle                ha
 *              \p trans_A == \ref rocsparse_operation_conjugate_transpose,
 *              \p trans_X == \ref rocsparse_operation_conjugate_transpose, or
 *              \ref rocsparse_matrix_type != \ref rocsparse_matrix_type_general.
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sbsrsm_analysis(rocsparse_handle          handle,
                                            rocsparse_direction       dir,
@@ -613,8 +613,8 @@ rocsparse_status rocsparse_bsrsm_clear(rocsparse_handle handle, rocsparse_mat_in
 *  Consider the lower triangular \f$m \times m\f$ matrix \f$L\f$, stored in BSR
 *  storage format with non-unit diagonal. The following example solves \f$L \cdot X = B\f$.
 *  \snippet example_rocsparse_bsrsm.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sbsrsm_solve(rocsparse_handle          handle,
                                         rocsparse_direction       dir,

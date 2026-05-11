@@ -84,8 +84,8 @@ extern "C" {
 *              \p col_block_dim_A, \p row_block_dim_C, or \p col_block_dim_C is invalid.
 *  \retval     rocsparse_status_invalid_pointer \p bsr_row_ptr_A, \p bsr_col_ind_A,
 *              \p descr_A, or \p buffer_size pointer is invalid.
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sgebsr2gebsr_buffer_size(rocsparse_handle          handle,
                                                     rocsparse_direction       dir,
@@ -324,8 +324,8 @@ rocsparse_status rocsparse_gebsr2gebsr_nnz(rocsparse_handle          handle,
 *  \par Example
 *  This example converts a general BSR matrix into an general BSR matrix.
 *  \snippet example_rocsparse_gebsr2gebsr.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sgebsr2gebsr(rocsparse_handle          handle,
                                         rocsparse_direction       dir,

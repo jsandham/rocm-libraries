@@ -76,8 +76,8 @@ extern "C" {
 *  \retval     rocsparse_status_invalid_size \p nnz is invalid.
 *  \retval     rocsparse_status_invalid_pointer \p y, \p x_val, or \p x_ind pointer is
 *              invalid.
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sgthrz(rocsparse_handle     handle,
                                   rocsparse_int        nnz,

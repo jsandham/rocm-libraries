@@ -75,8 +75,8 @@ extern "C" {
 *
 *  \par Example
 *  \snippet example_rocsparse_dense2coo.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sdense2coo(rocsparse_handle          handle,
                                       rocsparse_int             m,

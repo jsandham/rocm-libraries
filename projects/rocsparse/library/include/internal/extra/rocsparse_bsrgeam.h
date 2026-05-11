@@ -213,8 +213,8 @@ rocsparse_status rocsparse_bsrgeam_nnzb(rocsparse_handle          handle,
 *  \par Example
 *  This example adds two CSR matrices.
 *  \snippet example_rocsparse_bsrgeam.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sbsrgeam(rocsparse_handle          handle,
                                     rocsparse_direction       dir,

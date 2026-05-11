@@ -90,8 +90,8 @@ extern "C" {
 *  \par Example
 *  This example converts a CSR matrix into a HYB matrix using user-defined partitioning.
 *  \snippet example_rocsparse_csr2hyb.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scsr2hyb(rocsparse_handle          handle,
                                     rocsparse_int             m,

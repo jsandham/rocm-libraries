@@ -132,8 +132,8 @@ rocsparse_status rocsparse_csr2ell_width(rocsparse_handle          handle,
 *  \par Example
 *  This example converts a CSR matrix into an ELL matrix.
 *  \snippet example_rocsparse_csr2ell.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scsr2ell(rocsparse_handle          handle,
                                     rocsparse_int             m,

@@ -210,8 +210,8 @@ rocsparse_status rocsparse_csr2csc_buffer_size(rocsparse_handle     handle,
 *  \par Example
 *  This example computes the symbolic transpose of A
 *  \snippet example_rocsparse_csr2csc.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scsr2csc(rocsparse_handle     handle,
                                     rocsparse_int        m,

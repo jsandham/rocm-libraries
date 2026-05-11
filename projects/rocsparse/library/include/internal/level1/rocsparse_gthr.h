@@ -76,8 +76,8 @@ extern "C" {
 *
 *  \par Example
 *  \snippet example_rocsparse_gthr.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_sgthr(rocsparse_handle     handle,
                                  rocsparse_int        nnz,

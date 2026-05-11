@@ -84,8 +84,8 @@ extern "C" {
 *  \retval rocsparse_status_invalid_size \p mb, \p nb, \p nnzb, \p row_block_dim, or \p col_block_dim is invalid.
 *  \retval rocsparse_status_invalid_pointer \p bsr_val, \p bsr_row_ptr, \p bsr_col_ind, or \p buffer_size pointer
 *          is invalid.
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scheck_matrix_gebsr_buffer_size(rocsparse_handle       handle,
                                                            rocsparse_direction    dir,
@@ -277,8 +277,8 @@ rocsparse_status rocsparse_zcheck_matrix_gebsr_buffer_size(rocsparse_handle    h
 *   hipFree(dbsr_col_ind);
 *   hipFree(dbsr_val);
 *  \endcode
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scheck_matrix_gebsr(rocsparse_handle       handle,
                                                rocsparse_direction    dir,

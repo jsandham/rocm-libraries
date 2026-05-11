@@ -168,8 +168,8 @@ rocsparse_status rocsparse_csr2bsr_nnz(rocsparse_handle          handle,
 *  \par Example
 *  This example converts a CSR matrix into an BSR matrix.
 *  \snippet example_rocsparse_csr2bsr.cpp doc example
+* @{
 */
-/**@{*/
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_scsr2bsr(rocsparse_handle          handle,
                                     rocsparse_direction       dir,
