@@ -232,11 +232,16 @@ auto hipsparse_axpby_dispatch(const Arguments& arg)
 
 #define HIPSPARSE_UNPACK(...) __VA_ARGS__
 
-// Shared per-numeric-type expansion for SPMV-style dispatches. The IDX_PACK
-// argument is a parenthesized list of one or more index types that prefix the
-// data-type pack passed to TEST. e.g. for ijabct dispatch, IDX_PACK is
-// (int32_t, int32_t); for iabct it is (int32_t).
-#define HIPSPARSE_SPMV_NUMERIC_DISPATCH(IDX_PACK)                                                \
+// Shared per-numeric-type expansion for SPMV / SPMM style dispatches. The
+// IDX_PACK argument is a parenthesized list of one or more index types that
+// prefix the data-type pack passed to TEST. e.g. for ijabct dispatch, IDX_PACK
+// is (int32_t, int32_t); for iabct it is (int32_t). For SPMV the trailing
+// type pack is interpreted as <A, X, Y, T> (sparse / dense input / dense
+// output / compute). For SPMM the same pack is reused with the dense input
+// being matrix B and the dense output being matrix C, so the mapping is
+// <A, B, C, T>; the Arguments fields a_type, x_type, y_type and compute_type
+// are interpreted accordingly by the routine-specific dispatch below.
+#define HIPSPARSE_AXYT_NUMERIC_DISPATCH(IDX_PACK)                                                \
     do                                                                                           \
     {                                                                                            \
         /* Uniform precisions: A == X == Y == T */                                               \
@@ -320,15 +325,15 @@ auto hipsparse_ijabct_spmv_dispatch(const Arguments& arg)
 
     if(I == HIPSPARSE_INDEX_32I && J == HIPSPARSE_INDEX_32I)
     {
-        HIPSPARSE_SPMV_NUMERIC_DISPATCH((int32_t, int32_t));
+        HIPSPARSE_AXYT_NUMERIC_DISPATCH((int32_t, int32_t));
     }
     else if(I == HIPSPARSE_INDEX_64I && J == HIPSPARSE_INDEX_32I)
     {
-        HIPSPARSE_SPMV_NUMERIC_DISPATCH((int64_t, int32_t));
+        HIPSPARSE_AXYT_NUMERIC_DISPATCH((int64_t, int32_t));
     }
     else if(I == HIPSPARSE_INDEX_64I && J == HIPSPARSE_INDEX_64I)
     {
-        HIPSPARSE_SPMV_NUMERIC_DISPATCH((int64_t, int64_t));
+        HIPSPARSE_AXYT_NUMERIC_DISPATCH((int64_t, int64_t));
     }
 
     return TEST<void>{}(arg);
@@ -348,17 +353,74 @@ auto hipsparse_iabct_spmv_dispatch(const Arguments& arg)
 
     if(I == HIPSPARSE_INDEX_32I)
     {
-        HIPSPARSE_SPMV_NUMERIC_DISPATCH((int32_t));
+        HIPSPARSE_AXYT_NUMERIC_DISPATCH((int32_t));
     }
     else if(I == HIPSPARSE_INDEX_64I)
     {
-        HIPSPARSE_SPMV_NUMERIC_DISPATCH((int64_t));
+        HIPSPARSE_AXYT_NUMERIC_DISPATCH((int64_t));
     }
 
     return TEST<void>{}(arg);
 }
 
-#undef HIPSPARSE_SPMV_NUMERIC_DISPATCH
+// SPMM dispatch for routines whose matrix has two distinct index types
+// (row pointer / column index), e.g. CSR. Iterates over the supported (I, J)
+// combinations and passes <I, J, A, B, C, T> to TEST. The Arguments fields
+// a_type / x_type / y_type / compute_type are reused for the SPMM matrix
+// element types A / B / C and the scalar compute type T respectively.
+template <template <typename...> class TEST>
+auto hipsparse_ijabct_spmm_dispatch(const Arguments& arg)
+{
+    const auto I = arg.index_type_I;
+    const auto J = arg.index_type_J;
+    const auto A = arg.a_type;
+    const auto X = arg.x_type;
+    const auto Y = arg.y_type;
+    const auto T = arg.compute_type;
+
+    if(I == HIPSPARSE_INDEX_32I && J == HIPSPARSE_INDEX_32I)
+    {
+        HIPSPARSE_AXYT_NUMERIC_DISPATCH((int32_t, int32_t));
+    }
+    else if(I == HIPSPARSE_INDEX_64I && J == HIPSPARSE_INDEX_32I)
+    {
+        HIPSPARSE_AXYT_NUMERIC_DISPATCH((int64_t, int32_t));
+    }
+    else if(I == HIPSPARSE_INDEX_64I && J == HIPSPARSE_INDEX_64I)
+    {
+        HIPSPARSE_AXYT_NUMERIC_DISPATCH((int64_t, int64_t));
+    }
+
+    return TEST<void>{}(arg);
+}
+
+// SPMM dispatch for routines whose matrix has a single index type (I == J),
+// e.g. COO. Iterates only over the supported I types and passes
+// <I, A, B, C, T> to TEST. Like the CSR SPMM dispatch, the Arguments fields
+// a_type / x_type / y_type / compute_type are interpreted as the SPMM
+// matrix element types A / B / C and the scalar compute type T.
+template <template <typename...> class TEST>
+auto hipsparse_iabct_spmm_dispatch(const Arguments& arg)
+{
+    const auto I = arg.index_type_I;
+    const auto A = arg.a_type;
+    const auto X = arg.x_type;
+    const auto Y = arg.y_type;
+    const auto T = arg.compute_type;
+
+    if(I == HIPSPARSE_INDEX_32I)
+    {
+        HIPSPARSE_AXYT_NUMERIC_DISPATCH((int32_t));
+    }
+    else if(I == HIPSPARSE_INDEX_64I)
+    {
+        HIPSPARSE_AXYT_NUMERIC_DISPATCH((int64_t));
+    }
+
+    return TEST<void>{}(arg);
+}
+
+#undef HIPSPARSE_AXYT_NUMERIC_DISPATCH
 #undef HIPSPARSE_UNPACK
 
 #endif // TYPE_DISPATCH_HPP

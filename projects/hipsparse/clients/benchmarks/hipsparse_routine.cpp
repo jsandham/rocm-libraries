@@ -705,9 +705,9 @@ hipsparseStatus_t hipsparse_routine::dispatch_call(const Arguments& arg)
         // Level3
         DEFINE_CASE_T(bsrmm);
         DEFINE_CASE_T(bsrsm2);
-        DEFINE_CASE_IT_X(coomm, testing_spmm_coo);
-        DEFINE_CASE_IJT_X(cscmm, testing_spmm_csc);
-        DEFINE_CASE_IJT_X(csrmm, testing_spmm_csr);
+        DEFINE_CASE_IABCT_X(coomm, testing_spmm_coo);
+        DEFINE_CASE_IJABCT_X(cscmm, testing_spmm_csc);
+        DEFINE_CASE_IJABCT_X(csrmm, testing_spmm_csr);
         DEFINE_CASE_IT_X(coosm, testing_spsm_coo);
         DEFINE_CASE_IJT_X(csrsm, testing_spsm_csr);
         DEFINE_CASE_T(gemmi);

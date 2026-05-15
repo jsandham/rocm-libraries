@@ -30,6 +30,7 @@ struct hipsparse_test_numeric_types_enum
         all,
         real_only,
         complex_only,
-        spmv
+        spmv,
+        spmm
     } value_type;
 };

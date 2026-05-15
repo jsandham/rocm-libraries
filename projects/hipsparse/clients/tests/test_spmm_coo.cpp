@@ -26,7 +26,7 @@
 
 TEST_ROUTINE_WITH_CONFIG(spmm_coo,
                          generic,
-                         hipsparse_test_config_it,
+                         hipsparse_test_config_iabct_spmm,
                          arg.M,
                          arg.N,
                          arg.K,

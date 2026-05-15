@@ -52,7 +52,32 @@ Tests:
   spmm_alg: [HIPSPARSE_SPMM_ALG_DEFAULT, 
              HIPSPARSE_SPMM_CSR_ALG1,
              HIPSPARSE_SPMM_CSR_ALG2]
-             
+
+# NOTE: rocSPARSE CSC SpMM does not produce correct results when the output
+# matrix C is in row-major layout and the C data type is lower precision than
+# the compute type (e.g. C in f16/bf16 with compute in f32). The mixed-precision
+# CSC tests therefore restrict orderC to column-major. orderB stays free.
+- name: spmm_csc_mixed
+  category: quick
+  function: spmm_csc
+  indextype: *i32_i64
+  precision: *spmm_mixed_precisions
+  M: [89]
+  N: [11, 18]
+  K: [72]
+  alpha: [2.0]
+  alphai: [-0.5]
+  beta: [1.0]
+  betai: [0.75]
+  transA: [HIPSPARSE_OPERATION_NON_TRANSPOSE]
+  transB: [HIPSPARSE_OPERATION_NON_TRANSPOSE]
+  orderB: [HIPSPARSE_ORDER_COL, HIPSPARSE_ORDER_ROW]
+  orderC: [HIPSPARSE_ORDER_COL, HIPSPARSE_ORDER_ROW]
+  baseA: [HIPSPARSE_INDEX_BASE_ZERO, HIPSPARSE_INDEX_BASE_ONE]
+  spmm_alg: [HIPSPARSE_SPMM_ALG_DEFAULT,
+             HIPSPARSE_SPMM_CSR_ALG1,
+             HIPSPARSE_SPMM_CSR_ALG2]
+
 - name: spmm_csc
   category: pre_checkin
   function: spmm_csc

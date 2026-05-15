@@ -48,6 +48,7 @@ public:
             return std::is_same<T, hipComplex>{} || std::is_same<T, hipDoubleComplex>{};
         }
         case hipsparse_test_numeric_types_enum::spmv:
+        case hipsparse_test_numeric_types_enum::spmm:
         {
             return std::is_same<T, int8_t>{} || std::is_same<T, int32_t>{}
                    || std::is_same<T, hipsparseFloat16>{} || std::is_same<T, hipsparseBfloat16>{}

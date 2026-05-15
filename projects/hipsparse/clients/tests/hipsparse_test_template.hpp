@@ -122,6 +122,7 @@ namespace
                     break;
                 }
                 case hipsparse_test_dispatch_enum::ijabct_spmv:
+                case hipsparse_test_dispatch_enum::ijabct_spmm:
                 {
                     s << hipsparse_indextype2string(arg.index_type_I) << '_'
                       << hipsparse_indextype2string(arg.index_type_J) << '_'
@@ -132,6 +133,7 @@ namespace
                     break;
                 }
                 case hipsparse_test_dispatch_enum::iabct_spmv:
+                case hipsparse_test_dispatch_enum::iabct_spmm:
                 {
                     s << hipsparse_indextype2string(arg.index_type_I) << '_'
                       << hipsparse_datatype2string(arg.a_type) << '_'
@@ -314,6 +316,72 @@ namespace
             T,
             typename std::enable_if<check_t::template is_valid_type<I, A, X, Y, T>()>::type>
             : hipsparse_test_template<ROUTINE>::template test_call_proxy<I, A, X, Y, T>
+        {
+        };
+
+        struct test : hipsparse_test_template<ROUTINE>::template test_proxy<test, test_call>
+        {
+        };
+    };
+
+    template <hipsparse_test_enum::value_type ROUTINE>
+    struct hipsparse_test_ijabct_spmm_template
+    {
+        using check_t = hipsparse_test_check<ROUTINE>;
+
+        template <typename I      = int32_t,
+                  typename J      = int32_t,
+                  typename A      = float,
+                  typename B      = float,
+                  typename C      = float,
+                  typename T      = float,
+                  typename ENABLE = void>
+        struct test_call : hipsparse_test_invalid
+        {
+        };
+
+        template <typename I, typename J, typename A, typename B, typename C, typename T>
+        struct test_call<
+            I,
+            J,
+            A,
+            B,
+            C,
+            T,
+            typename std::enable_if<check_t::template is_valid_type<I, J, A, B, C, T>()>::type>
+            : hipsparse_test_template<ROUTINE>::template test_call_proxy<I, J, A, B, C, T>
+        {
+        };
+
+        struct test : hipsparse_test_template<ROUTINE>::template test_proxy<test, test_call>
+        {
+        };
+    };
+
+    template <hipsparse_test_enum::value_type ROUTINE>
+    struct hipsparse_test_iabct_spmm_template
+    {
+        using check_t = hipsparse_test_check<ROUTINE>;
+
+        template <typename I      = int32_t,
+                  typename A      = float,
+                  typename B      = float,
+                  typename C      = float,
+                  typename T      = float,
+                  typename ENABLE = void>
+        struct test_call : hipsparse_test_invalid
+        {
+        };
+
+        template <typename I, typename A, typename B, typename C, typename T>
+        struct test_call<
+            I,
+            A,
+            B,
+            C,
+            T,
+            typename std::enable_if<check_t::template is_valid_type<I, A, B, C, T>()>::type>
+            : hipsparse_test_template<ROUTINE>::template test_call_proxy<I, A, B, C, T>
         {
         };
 

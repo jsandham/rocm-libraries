@@ -297,6 +297,14 @@ SpMV mixed precisions: &spmv_mixed_precisions
   - *float32_cmplx32_cmplx32_cmplx32_axyt_precision
   - *float64_cmplx64_cmplx64_cmplx64_axyt_precision
 
+SpMM mixed precisions: &spmm_mixed_precisions
+  - *int8_int8_int32_int32_axyt_precision
+  - *int8_int8_float32_float32_axyt_precision
+  - *float16_float16_float32_float32_axyt_precision
+  - *float16_float16_float16_float32_axyt_precision
+  - *bfloat16_bfloat16_float32_float32_axyt_precision
+  - *bfloat16_bfloat16_bfloat16_float32_axyt_precision
+
 # The Arguments struct passed directly to C++. See hipsparse_arguments.hpp.
 # The order of the entries is significant, so it can't simply be a dictionary.
 # The types on the RHS are eval'd for Python-recognized types including ctypes

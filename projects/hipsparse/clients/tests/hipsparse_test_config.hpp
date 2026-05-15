@@ -105,3 +105,15 @@ struct hipsparse_test_config_iabct_spmv
                                      hipsparse_test_numeric_types_enum::spmv>
 {
 };
+
+struct hipsparse_test_config_ijabct_spmm
+    : hipsparse_test_config_template<hipsparse_test_dispatch_enum::ijabct_spmm,
+                                     hipsparse_test_numeric_types_enum::spmm>
+{
+};
+
+struct hipsparse_test_config_iabct_spmm
+    : hipsparse_test_config_template<hipsparse_test_dispatch_enum::iabct_spmm,
+                                     hipsparse_test_numeric_types_enum::spmm>
+{
+};

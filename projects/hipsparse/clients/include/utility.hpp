@@ -3561,7 +3561,12 @@ inline void host_bsrmm(int                     Mb,
     }
 }
 
-template <typename I, typename J, typename T>
+template <typename I,
+          typename J,
+          typename Aval,
+          typename Bval,
+          typename Cval,
+          typename T>
 void host_csrmm(J                    M,
                 J                    N,
                 J                    K,
@@ -3570,12 +3575,12 @@ void host_csrmm(J                    M,
                 T                    alpha,
                 const I*             csr_row_ptr_A,
                 const J*             csr_col_ind_A,
-                const T*             csr_val_A,
-                const T*             B,
+                const Aval*          csr_val_A,
+                const Bval*          dn_B,
                 int64_t              ldb,
                 hipsparseOrder_t     orderB,
                 T                    beta,
-                T*                   C,
+                Cval*                dn_C,
                 int64_t              ldc,
                 hipsparseOrder_t     orderC,
                 hipsparseIndexBase_t base,
@@ -3615,30 +3620,39 @@ void host_csrmm(J                    M,
                         idx_B = (j + (csr_col_ind_A[k] - base) * ldb);
                     }
 
-                    sum = testing_fma(
-                        testing_conj(csr_val_A[k], conj_A), testing_conj(B[idx_B], conj_B), sum);
+                    const T a_v = testing_cast<T>(testing_conj(csr_val_A[k], conj_A));
+                    const T b_v = static_cast<T>(testing_conj(dn_B[idx_B], conj_B));
+                    sum         = testing_fma(a_v, b_v, sum);
                 }
 
                 if(beta == make_DataType<T>(0))
                 {
-                    C[idx_C] = testing_mult(alpha, sum);
+                    dn_C[idx_C] = static_cast<Cval>(testing_mult(alpha, sum));
                 }
                 else
                 {
-                    C[idx_C] = testing_fma(beta, C[idx_C], testing_mult(alpha, sum));
+                    T c_v       = static_cast<T>(dn_C[idx_C]);
+                    dn_C[idx_C] = static_cast<Cval>(testing_fma(beta, c_v, testing_mult(alpha, sum)));
                 }
             }
         }
     }
     else
     {
-        // scale C by beta
+        // Accumulate in a temporary T-precision buffer to avoid Cval<->T
+        // round-trip rounding when Cval has lower precision than T (e.g.
+        // Cval=f16, T=f32). The output for the transposed-A path is a
+        // scatter pattern, so each output cell can be written many times.
+        std::vector<T> tmp_C(size_t(K) * size_t(N));
+
+        // Initialize tmp_C with beta * C
         for(J i = 0; i < K; i++)
         {
             for(J j = 0; j < N; ++j)
             {
-                int64_t idx_C = (orderC == HIPSPARSE_ORDER_COL) ? i + j * ldc : i * ldc + j;
-                C[idx_C]      = testing_mult(beta, C[idx_C]);
+                int64_t idx_C       = (orderC == HIPSPARSE_ORDER_COL) ? i + j * ldc : i * ldc + j;
+                T       c_v         = static_cast<T>(dn_C[idx_C]);
+                tmp_C[size_t(i) * size_t(N) + size_t(j)] = testing_mult(beta, c_v);
             }
         }
 
@@ -3652,7 +3666,7 @@ void host_csrmm(J                    M,
                 for(I k = row_begin; k < row_end; ++k)
                 {
                     J col = csr_col_ind_A[k] - base;
-                    T val = testing_conj(csr_val_A[k], conj_A);
+                    T val = testing_cast<T>(testing_conj(csr_val_A[k], conj_A));
 
                     int64_t idx_B = 0;
 
@@ -3669,12 +3683,21 @@ void host_csrmm(J                    M,
                         idx_B = (j + i * ldb);
                     }
 
-                    int64_t idx_C = (orderC == HIPSPARSE_ORDER_COL) ? col + j * ldc : col * ldc + j;
-
-                    C[idx_C]
-                        = C[idx_C]
-                          + testing_mult(alpha, testing_mult(val, testing_conj(B[idx_B], conj_B)));
+                    const T b_v = static_cast<T>(testing_conj(dn_B[idx_B], conj_B));
+                    tmp_C[size_t(col) * size_t(N) + size_t(j)]
+                        = tmp_C[size_t(col) * size_t(N) + size_t(j)]
+                          + testing_mult(alpha, testing_mult(val, b_v));
                 }
+            }
+        }
+
+        // Write tmp_C back to dn_C with the appropriate cast and layout
+        for(J i = 0; i < K; i++)
+        {
+            for(J j = 0; j < N; ++j)
+            {
+                int64_t idx_C = (orderC == HIPSPARSE_ORDER_COL) ? i + j * ldc : i * ldc + j;
+                dn_C[idx_C]   = static_cast<Cval>(tmp_C[size_t(i) * size_t(N) + size_t(j)]);
             }
         }
     }
@@ -3790,7 +3813,12 @@ void host_csrmm_batched(J                    M,
     }
 }
 
-template <typename T, typename I, typename J>
+template <typename I,
+          typename J,
+          typename Aval,
+          typename Bval,
+          typename Cval,
+          typename T>
 void host_cscmm(J                    M,
                 J                    N,
                 J                    K,
@@ -3799,12 +3827,12 @@ void host_cscmm(J                    M,
                 T                    alpha,
                 const I*             csc_col_ptr_A,
                 const J*             csc_row_ind_A,
-                const T*             csc_val_A,
-                const T*             B,
+                const Aval*          csc_val_A,
+                const Bval*          B,
                 int64_t              ldb,
                 hipsparseOrder_t     order_B,
                 T                    beta,
-                T*                   C,
+                Cval*                C,
                 int64_t              ldc,
                 hipsparseOrder_t     order_C,
                 hipsparseIndexBase_t base)
@@ -3992,7 +4020,11 @@ void host_cscmm_batched(J                    M,
     }
 }
 
-template <typename T, typename I>
+template <typename I,
+          typename Aval,
+          typename Bval,
+          typename Cval,
+          typename T>
 void host_coomm(I                    M,
                 I                    N,
                 I                    K,
@@ -4002,12 +4034,12 @@ void host_coomm(I                    M,
                 T                    alpha,
                 const I*             coo_row_ind_A,
                 const I*             coo_col_ind_A,
-                const T*             coo_val_A,
-                const T*             B,
+                const Aval*          coo_val_A,
+                const Bval*          dn_B,
                 int64_t              ldb,
                 hipsparseOrder_t     order_B,
                 T                    beta,
-                T*                   C,
+                Cval*                dn_C,
                 int64_t              ldc,
                 hipsparseOrder_t     order_C,
                 hipsparseIndexBase_t base)
@@ -4025,8 +4057,8 @@ void host_coomm(I                    M,
             for(I i = 0; i < M; ++i)
             {
                 int64_t idx_C = (order_C == HIPSPARSE_ORDER_COL) ? i + j * ldc : i * ldc + j;
-
-                C[idx_C] = testing_mult(beta, C[idx_C]);
+                T       c_v   = static_cast<T>(dn_C[idx_C]);
+                dn_C[idx_C]   = static_cast<Cval>(testing_mult(beta, c_v));
             }
         }
 
@@ -4037,9 +4069,10 @@ void host_coomm(I                    M,
         {
             for(I i = 0; i < nnz; ++i)
             {
-                I row = coo_row_ind_A[i] - base;
-                I col = coo_col_ind_A[i] - base;
-                T val = testing_mult(alpha, coo_val_A[i]);
+                I       row = coo_row_ind_A[i] - base;
+                I       col = coo_col_ind_A[i] - base;
+                const T a_v = testing_cast<T>(coo_val_A[i]);
+                T       val = testing_mult(alpha, a_v);
 
                 int64_t idx_C = (order_C == HIPSPARSE_ORDER_COL) ? row + j * ldc : row * ldc + j;
 
@@ -4055,7 +4088,9 @@ void host_coomm(I                    M,
                     idx_B = (j + col * ldb);
                 }
 
-                C[idx_C] = testing_fma(val, testing_conj(B[idx_B], conj_B), C[idx_C]);
+                const T b_v = static_cast<T>(testing_conj(dn_B[idx_B], conj_B));
+                T       c_v = static_cast<T>(dn_C[idx_C]);
+                dn_C[idx_C] = static_cast<Cval>(testing_fma(val, b_v, c_v));
             }
         }
     }
@@ -4069,8 +4104,8 @@ void host_coomm(I                    M,
             for(I i = 0; i < K; ++i)
             {
                 int64_t idx_C = (order_C == HIPSPARSE_ORDER_COL) ? i + j * ldc : i * ldc + j;
-
-                C[idx_C] = testing_mult(beta, C[idx_C]);
+                T       c_v   = static_cast<T>(dn_C[idx_C]);
+                dn_C[idx_C]   = static_cast<Cval>(testing_mult(beta, c_v));
             }
         }
 
@@ -4081,9 +4116,10 @@ void host_coomm(I                    M,
         {
             for(I i = 0; i < nnz; ++i)
             {
-                I row = coo_row_ind_A[i] - base;
-                I col = coo_col_ind_A[i] - base;
-                T val = testing_mult(alpha, testing_conj(coo_val_A[i], conj_A));
+                I       row = coo_row_ind_A[i] - base;
+                I       col = coo_col_ind_A[i] - base;
+                const T a_v = testing_cast<T>(testing_conj(coo_val_A[i], conj_A));
+                T       val = testing_mult(alpha, a_v);
 
                 int64_t idx_C = (order_C == HIPSPARSE_ORDER_COL) ? col + j * ldc : col * ldc + j;
 
@@ -4099,7 +4135,9 @@ void host_coomm(I                    M,
                     idx_B = (j + row * ldb);
                 }
 
-                C[idx_C] = testing_fma(val, testing_conj(B[idx_B], conj_B), C[idx_C]);
+                const T b_v = static_cast<T>(testing_conj(dn_B[idx_B], conj_B));
+                T       c_v = static_cast<T>(dn_C[idx_C]);
+                dn_C[idx_C] = static_cast<Cval>(testing_fma(val, b_v, c_v));
             }
         }
     }

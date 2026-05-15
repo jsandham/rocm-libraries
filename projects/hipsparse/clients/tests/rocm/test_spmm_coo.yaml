@@ -55,6 +55,29 @@ Tests:
              HIPSPARSE_SPMM_COO_ALG3,
              HIPSPARSE_SPMM_COO_ALG4]
 
+- name: spmm_coo_mixed
+  category: quick
+  function: spmm_coo
+  indextype: *i32_i64
+  precision: *spmm_mixed_precisions
+  M: [72]
+  N: [5, 11]
+  K: [63]
+  alpha: [2.0]
+  alphai: [-0.5]
+  beta: [1.0]
+  betai: [0.75]
+  transA: [HIPSPARSE_OPERATION_NON_TRANSPOSE]
+  transB: [HIPSPARSE_OPERATION_NON_TRANSPOSE]
+  orderB: [HIPSPARSE_ORDER_COL, HIPSPARSE_ORDER_ROW]
+  orderC: [HIPSPARSE_ORDER_COL, HIPSPARSE_ORDER_ROW]
+  baseA: [HIPSPARSE_INDEX_BASE_ZERO, HIPSPARSE_INDEX_BASE_ONE]
+  spmm_alg: [HIPSPARSE_SPMM_ALG_DEFAULT,
+             HIPSPARSE_SPMM_COO_ALG1,
+             HIPSPARSE_SPMM_COO_ALG2,
+             HIPSPARSE_SPMM_COO_ALG3,
+             HIPSPARSE_SPMM_COO_ALG4]
+
 - name: spmm_coo
   category: pre_checkin
   function: spmm_coo

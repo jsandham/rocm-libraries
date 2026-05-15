@@ -32,6 +32,8 @@ struct hipsparse_test_dispatch_enum
         ijt,
         axpby,
         ijabct_spmv,
-        iabct_spmv
+        iabct_spmv,
+        ijabct_spmm,
+        iabct_spmm
     } value_type;
 };
