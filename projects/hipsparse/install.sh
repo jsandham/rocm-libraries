@@ -284,7 +284,7 @@ build_release=true
 build_release_debug=false
 build_codecoverage=false
 install_prefix=hipsparse-install
-rocm_path=/opt/rocm
+rocm_path=${ROCM_PATH:-/opt/rocm}
 build_relocatable=false
 build_address_sanitizer=false
 compiler=${CXX}
@@ -473,7 +473,7 @@ fi
 if [[ "${build_relocatable}" == true ]]; then
     export PATH=${rocm_path}/bin:${PATH}
 else
-    export PATH=${PATH}:/opt/rocm/bin
+    export PATH=${PATH}:${rocm_path}/bin
 fi
 
 pushd .
@@ -543,7 +543,7 @@ pushd .
   if [[ "${build_relocatable}" == true ]]; then
     cmake_common_options="${cmake_common_options} -DCPACK_SET_DESTDIR=OFF -DCPACK_PACKAGING_INSTALL_PREFIX=${rocm_path}"
   else
-    cmake_common_options="${cmake_common_options} -DCPACK_SET_DESTDIR=OFF -DCPACK_PACKAGING_INSTALL_PREFIX=/opt/rocm"
+    cmake_common_options="${cmake_common_options} -DCPACK_SET_DESTDIR=OFF -DCPACK_PACKAGING_INSTALL_PREFIX=${rocm_path}"
   fi
 
   # cuda or hip
@@ -564,7 +564,7 @@ pushd .
       -DROCM_DISABLE_LDCONFIG=ON \
       -DROCM_PATH="${rocm_path}" ../..
   else
-    CXX=${compiler} CC=${c_compiler} ${cmake_executable} -DCMAKE_EXE_LINKER_FLAGS=" ${cmake_build_static_options}" ${cmake_common_options} ${cmake_client_options} -DCMAKE_INSTALL_PREFIX=hipsparse-install -DROCM_PATH=${rocm_path} ../..
+    CXX=${compiler} CC=${c_compiler} ${cmake_executable} -DCMAKE_EXE_LINKER_FLAGS=" ${cmake_build_static_options}" ${cmake_common_options} ${cmake_client_options} -DCMAKE_INSTALL_PREFIX=hipsparse-install -DCMAKE_PREFIX_PATH="${rocm_path};${rocm_path}/hip" -DROCM_PATH=${rocm_path} ../..
   fi
 
   check_exit_code "$?"
