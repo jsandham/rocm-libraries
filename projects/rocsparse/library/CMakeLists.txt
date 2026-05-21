@@ -115,18 +115,17 @@ if (NOT WIN32)
       HINTS
       ${ROCTX_PATH}
       ${ROCTX_PATH}/include
-      /opt/rocm/include
-      ${ROCTX_PATH}/../include
+      ${ROCM_PATH}/include
       DOC "Path to the roctracer include directory containing roctx.h")
 
     find_library(ROCTX_LIBRARY
       NAMES roctx64
       HINTS
-      ${ROCTX_PATH} # User-provided path
+      ${ROCTX_PATH}
       ${ROCTX_PATH}/lib
       ${ROCTX_PATH}/lib64
-      PATHS
-      /opt/rocm/lib # Default ROCm path
+      ${ROCM_PATH}/lib
+      ${ROCM_PATH}/lib64
     )
 
     if(ROCTRACER_INCLUDE_DIR AND ROCTX_LIBRARY)

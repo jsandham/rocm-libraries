@@ -315,7 +315,8 @@ build_static=false
 build_release_debug=false
 build_codecoverage=false
 install_prefix=rocsparse-install
-rocm_path=/opt/rocm
+# rocm_path=/opt/rocm
+rocm_path=${ROCM_PATH:-/opt/rocm}
 build_relocatable=false
 build_address_sanitizer=false
 build_memstat=false
@@ -556,7 +557,8 @@ fi
 if [[ "${build_relocatable}" == true ]]; then
     export PATH=${rocm_path}/bin:${PATH}
 else
-    export PATH=${PATH}:/opt/rocm/bin
+    export PATH=${PATH}:${rocm_path}/bin
+    # export PATH=${PATH}:/opt/rocm/bin
 fi
 
 pushd .
