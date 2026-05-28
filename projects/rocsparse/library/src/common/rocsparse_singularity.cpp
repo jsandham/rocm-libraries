@@ -25,6 +25,8 @@
 #include "rocsparse_handle.hpp"
 #include "rocsparse_logging.hpp"
 
+#include <cstdio>
+
 namespace rocsparse
 {
 
@@ -286,6 +288,27 @@ namespace rocsparse
             {
                 RETURN_IF_ROCSPARSE_ERROR(rocsparse_status_internal_error);
             }
+        }
+
+        {
+            const void* sym_pos = (symbolic) ? symbolic->get_position() : nullptr;
+            const void* exa_pos = (exact) ? exact->get_position() : nullptr;
+            const void* nea_pos = (near) ? near->get_position() : nullptr;
+            fprintf(stderr,
+                    "[singularity_get_position_async] batch=%lld idx=%d pos_mode=%d "
+                    "symbolic_obj=%p sym_pos=%p exact_obj=%p exa_pos=%p near_obj=%p nea_pos=%p "
+                    "out_position=%p\n",
+                    (long long)batch_count,
+                    (int)indextype,
+                    (int)position_pointer_mode,
+                    (const void*)symbolic,
+                    sym_pos,
+                    (const void*)exact,
+                    exa_pos,
+                    (const void*)near,
+                    nea_pos,
+                    position);
+            fflush(stderr);
         }
 
         RETURN_IF_ROCSPARSE_ERROR(
