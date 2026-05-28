@@ -183,6 +183,7 @@ void testing_bsric0_bad_arg(const Arguments& arg)
 template <typename T>
 void testing_bsric0(const Arguments& arg)
 {
+    std::cout << "AAAA" << std::endl;
     static constexpr bool       toint     = false;
     static constexpr bool       full_rank = false;
     rocsparse_matrix_factory<T> matrix_factory(arg, toint, full_rank);
@@ -242,6 +243,7 @@ void testing_bsric0(const Arguments& arg)
         }
     }
 
+    std::cout << "BBBB" << std::endl;
     host_vector<T> hbsr_val_orig(hbsr_val_1);
     host_vector<T> hbsr_val_gold(hbsr_val_1);
     host_vector<T> hbsr_val_2(hbsr_val_1);
@@ -280,6 +282,7 @@ void testing_bsric0(const Arguments& arg)
     device_vector<rocsparse_int> danalysis_pivot_2(1);
     device_vector<rocsparse_int> dsolve_pivot_2(1);
 
+    std::cout << "CCCC" << std::endl;
     // Obtain required buffer size
     size_t buffer_size;
     CHECK_ROCSPARSE_ERROR(rocsparse_bsric0_buffer_size<T>(handle,
@@ -294,6 +297,7 @@ void testing_bsric0(const Arguments& arg)
                                                           info,
                                                           &buffer_size));
 
+    std::cout << "buffer_size: " << buffer_size << std::endl;
     void* dbuffer;
     CHECK_HIP_ERROR(rocsparse_hipMalloc(&dbuffer, buffer_size));
 
@@ -301,6 +305,7 @@ void testing_bsric0(const Arguments& arg)
     {
         // Perform analysis step
 
+	std::cout << "DDDD" << std::endl;
         // Pointer mode host
         CHECK_ROCSPARSE_ERROR(rocsparse_set_pointer_mode(handle, rocsparse_pointer_mode_host));
         CHECK_ROCSPARSE_ERROR(rocsparse_bsric0_analysis<T>(handle,
@@ -316,12 +321,17 @@ void testing_bsric0(const Arguments& arg)
                                                            apol,
                                                            spol,
                                                            dbuffer));
+	CHECK_HIP_ERROR(hipDeviceSynchronize());
+	std::cout << "EEEE" << std::endl;
         {
             auto st = rocsparse_bsric0_zero_pivot(handle, info, hanalysis_pivot_1);
             EXPECT_ROCSPARSE_STATUS(st,
                                     (hanalysis_pivot_1[0] != -1) ? rocsparse_status_zero_pivot
                                                                  : rocsparse_status_success);
         }
+
+	CHECK_HIP_ERROR(hipDeviceSynchronize());
+        std::cout << "FFFF" << std::endl;
 
         // Pointer mode device
         CHECK_ROCSPARSE_ERROR(rocsparse_set_pointer_mode(handle, rocsparse_pointer_mode_device));
@@ -338,10 +348,14 @@ void testing_bsric0(const Arguments& arg)
                                                            apol,
                                                            spol,
                                                            dbuffer));
+	CHECK_HIP_ERROR(hipDeviceSynchronize());
+        std::cout << "GGGG" << std::endl;
         EXPECT_ROCSPARSE_STATUS(rocsparse_bsric0_zero_pivot(handle, info, danalysis_pivot_2),
                                 (hanalysis_pivot_1[0] != -1) ? rocsparse_status_zero_pivot
                                                              : rocsparse_status_success);
 
+	CHECK_HIP_ERROR(hipDeviceSynchronize());
+        std::cout << "HHHH" << std::endl;
         // Perform solve step
 
         // Pointer mode host
@@ -358,12 +372,16 @@ void testing_bsric0(const Arguments& arg)
                                                            info,
                                                            spol,
                                                            dbuffer));
+	CHECK_HIP_ERROR(hipDeviceSynchronize());
+        std::cout << "IIII" << std::endl;
         {
             auto st = rocsparse_bsric0_zero_pivot(handle, info, hsolve_pivot_1);
             EXPECT_ROCSPARSE_STATUS(st,
                                     (hsolve_pivot_1[0] != -1) ? rocsparse_status_zero_pivot
                                                               : rocsparse_status_success);
         }
+	CHECK_HIP_ERROR(hipDeviceSynchronize());
+        std::cout << "JJJJ" << std::endl;
 
         // Pointer mode device
         CHECK_ROCSPARSE_ERROR(rocsparse_set_pointer_mode(handle, rocsparse_pointer_mode_device));
@@ -379,10 +397,14 @@ void testing_bsric0(const Arguments& arg)
                                                            info,
                                                            spol,
                                                            dbuffer));
+	CHECK_HIP_ERROR(hipDeviceSynchronize());
+        std::cout << "KKKK" << std::endl;
         EXPECT_ROCSPARSE_STATUS(rocsparse_bsric0_zero_pivot(handle, info, dsolve_pivot_2),
                                 (hsolve_pivot_1[0] != -1) ? rocsparse_status_zero_pivot
                                                           : rocsparse_status_success);
 
+	CHECK_HIP_ERROR(hipDeviceSynchronize());
+        std::cout << "LLLL" << std::endl;
         // Copy output to host
         CHECK_HIP_ERROR(hipMemcpy(hbsr_val_1,
                                   dbsr_val_1,
@@ -397,6 +419,8 @@ void testing_bsric0(const Arguments& arg)
         CHECK_HIP_ERROR(hipMemcpy(
             hsolve_pivot_2, dsolve_pivot_2, sizeof(rocsparse_int), hipMemcpyDeviceToHost));
 
+	CHECK_HIP_ERROR(hipDeviceSynchronize());
+        std::cout << "MMMM" << std::endl;
         // CPU bsric0
         rocsparse_int numerical_pivot;
         rocsparse_int structural_pivot;
@@ -412,6 +436,8 @@ void testing_bsric0(const Arguments& arg)
 
         hanalysis_pivot_gold[0] = structural_pivot;
 
+	CHECK_HIP_ERROR(hipDeviceSynchronize());
+        std::cout << "NNNN" << std::endl;
         // Solve pivot gives the first numerical or structural non-invertible block
         if(structural_pivot == -1)
         {
@@ -431,6 +457,9 @@ void testing_bsric0(const Arguments& arg)
         hanalysis_pivot_gold.unit_check(hanalysis_pivot_2);
         hsolve_pivot_gold.unit_check(hsolve_pivot_1);
         hsolve_pivot_gold.unit_check(hsolve_pivot_2);
+
+	CHECK_HIP_ERROR(hipDeviceSynchronize());
+        std::cout << "OOOO" << std::endl;
 
         // Check solution vector if no pivot has been found
         if(hanalysis_pivot_gold[0] == -1 && hsolve_pivot_gold[0] == -1)
@@ -480,6 +509,9 @@ void testing_bsric0(const Arguments& arg)
                                                 hsolve_pivot_2);
             }
         }
+
+	CHECK_HIP_ERROR(hipDeviceSynchronize());
+        std::cout << "PPPP" << std::endl;
     }
 
     if(arg.timing)
