@@ -84,23 +84,6 @@ rocsparse_status rocsparse::position_t::create_position_async(int64_t           
                                                               rocsparse_indextype indextype,
                                                               hipStream_t         stream)
 {
-    //
-    // NOTE: we deliberately use the SYNCHRONOUS rocsparse_hipMalloc /
-    // rocsparse_hipFree here (rather than the stream-ordered *Async
-    // variants). Some callers (e.g. csrsv_solve, bsric0, bsric0_zero_pivot)
-    // invoke this from inside a hipGraph capture region (see
-    // clients/include/rocsparse_graph.hpp). With hipMallocAsync the
-    // allocation becomes a memory-alloc node in the captured graph and the
-    // pointer returned at capture time is a pool placeholder. On some
-    // HIP/ROCm versions the placeholder is not correctly fixed up at graph
-    // launch and downstream kernels (e.g. assign_kernel in
-    // set_max_position_async, or markers2position in
-    // singularity_get_position_async) fault on what is effectively an
-    // unmapped virtual address. A plain hipMalloc is graph-capture safe:
-    // it is not stream-ordered, not pool-backed, not recorded as a graph
-    // node, and the returned pointer lives until we free it (which the
-    // destructor already does via rocsparse_hipFree).
-    //
     fprintf(stderr,
             "[position_t::create ENTER] this=%p cur_pos=%p cur_batch=%lld req_batch=%lld "
             "cur_idx=%d req_idx=%d stream=%p\n",
@@ -116,23 +99,25 @@ rocsparse_status rocsparse::position_t::create_position_async(int64_t           
     if((this->m_position != nullptr) && (this->m_batch_count != batch_count))
     {
         fprintf(stderr,
-                "[position_t::create FREE]  this=%p freeing old m_position=%p\n",
+                "[position_t::create FREE]  this=%p freeing old m_position=%p stream=%p\n",
                 (void*)this,
-                this->m_position);
+                this->m_position,
+                (void*)stream);
         fflush(stderr);
-        RETURN_IF_HIP_ERROR(rocsparse_hipFree(this->m_position));
+        RETURN_IF_HIP_ERROR(rocsparse_hipFreeAsync(this->m_position, stream));
         this->m_position = nullptr;
     }
 
     if(this->m_position == nullptr)
     {
         RETURN_IF_HIP_ERROR(
-            rocsparse_hipMalloc(&this->m_position, sizeof(int64_t) * batch_count));
+            rocsparse_hipMallocAsync(&this->m_position, sizeof(int64_t) * batch_count, stream));
         fprintf(stderr,
-                "[position_t::create ALLOC] this=%p new m_position=%p bytes=%zu\n",
+                "[position_t::create ALLOC] this=%p new m_position=%p bytes=%zu stream=%p\n",
                 (void*)this,
                 this->m_position,
-                (size_t)(sizeof(int64_t) * batch_count));
+                (size_t)(sizeof(int64_t) * batch_count),
+                (void*)stream);
         fflush(stderr);
         if(indextype == rocsparse_indextype_i32)
         {

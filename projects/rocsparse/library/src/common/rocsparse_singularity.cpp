@@ -297,7 +297,7 @@ namespace rocsparse
             fprintf(stderr,
                     "[singularity_get_position_async] batch=%lld idx=%d pos_mode=%d "
                     "symbolic_obj=%p sym_pos=%p exact_obj=%p exa_pos=%p near_obj=%p nea_pos=%p "
-                    "out_position=%p\n",
+                    "out_position=%p stream=%p\n",
                     (long long)batch_count,
                     (int)indextype,
                     (int)position_pointer_mode,
@@ -307,7 +307,8 @@ namespace rocsparse
                     exa_pos,
                     (const void*)near,
                     nea_pos,
-                    position);
+                    position,
+                    (void*)handle->stream);
             fflush(stderr);
         }
 
