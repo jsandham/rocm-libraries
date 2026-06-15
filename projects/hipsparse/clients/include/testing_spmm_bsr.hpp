@@ -25,6 +25,10 @@
 #ifndef TESTING_SPMM_BSR_HPP
 #define TESTING_SPMM_BSR_HPP
 
+#include <hipsparse/hipsparse-version.h>
+
+#ifdef HIPSPARSE_WITH_SPMM_BSR
+
 #include "display.hpp"
 #include "flops.hpp"
 #include "gbyte.hpp"
@@ -499,5 +503,7 @@ void testing_spmm_bsr(Arguments argus)
     CHECK_HIPSPARSE_ERROR(hipsparseDestroyDnMat(matC2));
 #endif
 }
+
+#endif // HIPSPARSE_WITH_SPMM_BSR
 
 #endif // TESTING_SPMM_BSR_HPP

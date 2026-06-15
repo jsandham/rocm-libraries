@@ -37,5 +37,6 @@
 
 /* Feature flags baked in at build time. */
 #cmakedefine HIPSPARSE_WITH_SPMV_BSR
+#cmakedefine HIPSPARSE_WITH_SPMM_BSR
 
 #endif /* HIPSPARSE_VERSION_H */

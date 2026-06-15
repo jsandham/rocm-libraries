@@ -885,8 +885,10 @@ namespace hipsparse
             return CUSPARSE_SPMM_CSR_ALG3;
         case HIPSPARSE_SPMM_BLOCKED_ELL_ALG1:
             return CUSPARSE_SPMM_BLOCKED_ELL_ALG1;
+#ifdef HIPSPARSE_WITH_SPMM_BSR
         case HIPSPARSE_SPMM_BSR_ALG1:
             return CUSPARSE_SPMM_BSR_ALG1;
+#endif
         default:
             throw "Non existent hipsparseSpMMAlg_t";
         }

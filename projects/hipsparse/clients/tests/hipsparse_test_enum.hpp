@@ -36,6 +36,12 @@ static constexpr std::size_t countof2(T (&)[N])
 #define TRANSFORM_HIPSPARSE_TEST_ENUM_IF_SPMV_BSR(enum)
 #endif
 
+#ifdef HIPSPARSE_WITH_SPMM_BSR
+#define TRANSFORM_HIPSPARSE_TEST_ENUM_IF_SPMM_BSR(enum) TRANSFORM_HIPSPARSE_TEST_ENUM(enum)
+#else
+#define TRANSFORM_HIPSPARSE_TEST_ENUM_IF_SPMM_BSR(enum)
+#endif
+
 // clang-format off
 #define HIPSPARSE_FOREACH_TEST_ENUM \
     TRANSFORM_HIPSPARSE_TEST_ENUM(axpby) \
@@ -127,7 +133,7 @@ static constexpr std::size_t countof2(T (&)[N])
     TRANSFORM_HIPSPARSE_TEST_ENUM(spmm_batched_csc) \
     TRANSFORM_HIPSPARSE_TEST_ENUM(spmm_batched_csr) \
     TRANSFORM_HIPSPARSE_TEST_ENUM(spmm_bell) \
-    TRANSFORM_HIPSPARSE_TEST_ENUM(spmm_bsr) \
+    TRANSFORM_HIPSPARSE_TEST_ENUM_IF_SPMM_BSR(spmm_bsr) \
     TRANSFORM_HIPSPARSE_TEST_ENUM(spmm_coo) \
     TRANSFORM_HIPSPARSE_TEST_ENUM(spmm_csc) \
     TRANSFORM_HIPSPARSE_TEST_ENUM(spmm_csr) \

@@ -395,8 +395,11 @@ typedef enum
     HIPSPARSE_SPMM_CSR_ALG1         = 4, /**< CSR algorithm 1 */
     HIPSPARSE_SPMM_CSR_ALG2         = 6, /**< CSR algorithm 2 */
     HIPSPARSE_SPMM_CSR_ALG3         = 12, /**< CSR algorithm 3 */
-    HIPSPARSE_SPMM_BLOCKED_ELL_ALG1 = 13, /**< Blocked ELL algorithm 1 */
-    HIPSPARSE_SPMM_BSR_ALG1         = 14 /**< BSR algorithm 1 */
+    HIPSPARSE_SPMM_BLOCKED_ELL_ALG1 = 13 /**< Blocked ELL algorithm 1 */
+#ifdef HIPSPARSE_WITH_SPMM_BSR
+    ,
+    HIPSPARSE_SPMM_BSR_ALG1 = 14 /**< BSR algorithm 1 */
+#endif
 } hipsparseSpMMAlg_t;
 #else
 #if(CUDART_VERSION >= 12051)
@@ -410,8 +413,11 @@ typedef enum
     HIPSPARSE_SPMM_CSR_ALG1         = 4, /**< CSR algorithm 1 */
     HIPSPARSE_SPMM_CSR_ALG2         = 6, /**< CSR algorithm 2 */
     HIPSPARSE_SPMM_CSR_ALG3         = 12, /**< CSR algorithm 3 */
-    HIPSPARSE_SPMM_BLOCKED_ELL_ALG1 = 13, /**< Blocked ELL algorithm 1 */
-    HIPSPARSE_SPMM_BSR_ALG1         = 14 /**< BSR algorithm 1 */
+    HIPSPARSE_SPMM_BLOCKED_ELL_ALG1 = 13 /**< Blocked ELL algorithm 1 */
+#ifdef HIPSPARSE_WITH_SPMM_BSR
+    ,
+    HIPSPARSE_SPMM_BSR_ALG1 = 14 /**< BSR algorithm 1 */
+#endif
 } hipsparseSpMMAlg_t;
 #elif(CUDART_VERSION >= 12000 && CUDART_VERSION < 12051)
 typedef enum

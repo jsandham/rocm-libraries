@@ -69,6 +69,7 @@ endif()
 
 option(HIPSPARSE_BUILD_TESTING "Build test client." OFF)
 option(HIPSPARSE_ENABLE_SPMV_BSR "Build hipSPARSE with BSR format support in hipsparseSpMV." ON)
+option(HIPSPARSE_ENABLE_SPMM_BSR "Build hipSPARSE with BSR algorithm 1 support in hipsparseSpMM." ON)
 option(HIPSPARSE_ENABLE_COVERAGE "Build with code coverage enabled." OFF)
 option(HIPSPARSE_ENABLE_ASAN "Build with address sanitizer enabled." OFF)
 option(HIPSPARSE_BUILD_DOCS "Build documentation." OFF)

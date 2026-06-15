@@ -401,8 +401,10 @@ constexpr auto hipsparse_spmmalg2string(hipsparseSpMMAlg_t alg)
         return "csr_alg3";
     case HIPSPARSE_SPMM_BLOCKED_ELL_ALG1:
         return "bell_alg1";
+#ifdef HIPSPARSE_WITH_SPMM_BSR
     case HIPSPARSE_SPMM_BSR_ALG1:
         return "bsr_alg1";
+#endif
     }
     return "invalid";
 }
@@ -430,8 +432,10 @@ constexpr auto hipsparse_spmmalg2string(hipsparseSpMMAlg_t alg)
         return "csr_alg3";
     case HIPSPARSE_SPMM_BLOCKED_ELL_ALG1:
         return "bell_alg1";
+#ifdef HIPSPARSE_WITH_SPMM_BSR
     case HIPSPARSE_SPMM_BSR_ALG1:
         return "bsr_alg1";
+#endif
     }
     return "invalid";
 }
