@@ -86,6 +86,7 @@ include: test_sparse_to_dense_coo.yaml
 include: test_sparse_to_dense_csc.yaml
 include: test_sparse_to_dense_csr.yaml
 include: test_spgemm_csr.yaml
+include: test_spgemm_csr_reuse_descr.yaml
 include: test_spgemmreuse_csr.yaml
 include: test_spmm_batched_coo.yaml
 include: test_spmm_batched_csc.yaml
