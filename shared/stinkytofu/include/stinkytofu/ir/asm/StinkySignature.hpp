@@ -30,6 +30,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "stinkytofu/Export.hpp"
+
 namespace stinkytofu {
 /***************************************
  * Enum for Signature Value Kind
@@ -230,8 +232,10 @@ struct SrdUpperValue125X : public BitfieldUnion {
     std::string desc() const override;
 };
 
-// Factory function to create appropriate SRD value based on ISA version
-std::shared_ptr<BitfieldUnion> createSrdUpperValue(const std::array<int, 3>& isa);
+// Factory function to create appropriate SRD value based on ISA version.
+// Exported for the _stinkytofu.so Python module (libstinkytofu hides all
+// symbols by default; see shared/stinkytofu/CMakeLists.txt).
+STINKYTOFU_EXPORT std::shared_ptr<BitfieldUnion> createSrdUpperValue(const std::array<int, 3>& isa);
 
 /***************************************
  * Signature Argument
@@ -259,6 +263,12 @@ struct SignatureArgument {
 /***************************************
  * Signature Kernel Descriptor
  ***************************************/
+
+/// Function-metadata key (uint64) carrying SignatureKernelDescriptor::totalVgprs
+/// (the value emitted as `.amdhsa_next_free_vgpr`). Signature producers stamp it
+/// onto Function; occupancy-aware passes read it. Absent or 0 means "unknown".
+inline constexpr const char* kSigTotalVgprsMetaKey = "SignatureKernelDescriptor.totalVgprs";
+
 struct SignatureKernelDescriptor {
     std::string kernelName;
     int totalVgprs;
@@ -269,7 +279,7 @@ struct SignatureKernelDescriptor {
     int groupSegSize;
     std::array<int, 3> sgprWorkGroup;
     int vgprWorkItem;
-    bool enablePreloadKernArgs;
+    int numSgprPreload;
     std::array<int, 3> isaVersion;
     int wavefrontSize;
 
@@ -285,15 +295,29 @@ struct SignatureKernelDescriptor {
     bool directToLdsB = false;
     int useSgprForGRO = 0;
 
+    // Pass-through .amdhsa_* directives that the structured fields above do
+    // not model (e.g. .amdhsa_user_sgpr_count, .amdhsa_fp16_overflow,
+    // .amdhsa_inst_pref_size, .amdhsa_user_sgpr_kernarg_preload_*).
+    // RawAsmParser appends raw text here when round-tripping; toString()
+    // emits each entry verbatim before .end_amdhsa_kernel. Empty by default
+    // so rocisa-driven flows (which populate the structured fields directly)
+    // are unaffected.
+    std::vector<std::string> extraKernelDirectives;
+
+    /// Total instruction encoding size in bytes. If >= 0, .amdhsa_inst_pref_size (value/128) is
+    /// emitted.
+    int64_t totalInstructionBytes = -1;
+
     SignatureKernelDescriptor(const std::string& name, const std::array<int, 3>& isaVersion,
                               int groupSegSize, const std::array<int, 3>& sgprWorkGroup,
                               int vgprWorkItem, int wavefrontSize = 64, int totalVgprs = 0,
-                              int totalAgprs = 0, int totalSgprs = 0, bool preloadKernArgs = false);
+                              int totalAgprs = 0, int totalSgprs = 0, int numSgprPreload = 0);
 
     void setGprs(int totalVgprs, int totalAgprs, int totalSgprs);
     void setOptimizationConfig(const std::array<int, 2>& tt, const std::array<int, 2>& sg,
                                const std::array<int, 2>& wg, int vwA, int vwB, int glvwA, int glvwB,
                                bool d2lA, bool d2lB, int useSgprForGRO);
+    void setTotalInstructionBytes(int64_t totalBytes);
     int getNextFreeVgpr() const {
         return totalVgprs;
     }
@@ -332,7 +356,7 @@ struct SignatureCodeMeta {
 /***************************************
  * Signature Base (Main Class)
  ***************************************/
-struct SignatureBase {
+struct STINKYTOFU_EXPORT SignatureBase {
     SignatureKernelDescriptor kernelDescriptor;
     SignatureCodeMeta codeMeta;
 
@@ -340,12 +364,13 @@ struct SignatureBase {
                   int kernArgsVersion, const std::string& codeObjectVersion, int groupSegmentSize,
                   const std::array<int, 3>& sgprWorkGroup, int vgprWorkItem, int flatWorkGroupSize,
                   int wavefrontSize = 64, int totalVgprs = 0, int totalAgprs = 0,
-                  int totalSgprs = 0, bool preloadKernArgs = false);
+                  int totalSgprs = 0, int numSgprPreload = 0);
 
     void setGprs(int totalVgprs, int totalAgprs, int totalSgprs);
     void setOptimizationConfig(const std::array<int, 2>& tt, const std::array<int, 2>& sg,
                                const std::array<int, 2>& wg, int vwA, int vwB, int glvwA, int glvwB,
                                bool d2lA, bool d2lB, int useSgprForGRO);
+    void setTotalInstructionBytes(int64_t totalBytes);
     void addArg(const std::string& name, SignatureValueKind kind, const std::string& type,
                 const std::string& addrSpaceQual = "");
 

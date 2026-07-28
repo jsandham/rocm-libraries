@@ -92,8 +92,9 @@ public:
             _params.yTensor, variantPack.at(_params.yTensor.uid));
 
         // Extract epsilon from pass-by-value tensor (cast to double)
-        const double epsilon = hipdnn_flatbuffers_sdk::utilities::extractDoubleFromTensorValue(
-            _params.epsilonTensor, "Epsilon");
+        const double epsilon
+            = hipdnn_flatbuffers_sdk::utilities::resolveDoubleScalarFromVariantPack(
+                _params.epsilonTensor, variantPack, "Epsilon");
 
         // Scale tensor (required)
         auto scaleTensor = createShallowTensor<ScaleBiasDataType>(
@@ -198,6 +199,8 @@ public:
                 tensorMap, nodeAttributes->inv_variance_tensor_uid(), MeanInvVarianceDataTypeEnum);
         }
 
+        CHECK_NO_RAGGED_TENSORS(tensorMap);
+
         return true;
     }
 
@@ -225,20 +228,19 @@ public:
             invVariance = tensorMap.at(nodeAttributes->inv_variance_tensor_uid().value());
         }
 
-        LayernormFpropParams params(*tensorMap.at(nodeAttributes->x_tensor_uid()),
-                                    *tensorMap.at(nodeAttributes->y_tensor_uid()),
-                                    *tensorMap.at(nodeAttributes->epsilon_tensor_uid()),
-                                    *tensorMap.at(nodeAttributes->scale_tensor_uid()),
-                                    *tensorMap.at(nodeAttributes->bias_tensor_uid()),
-                                    nodeAttributes->normalized_dim_count(),
-                                    mean,
-                                    invVariance);
-
         return std::make_unique<LayernormFpropPlan<XDataType,
                                                    ScaleBiasDataType,
                                                    MeanInvVarianceDataType,
                                                    OutputDataType,
-                                                   ComputeDataType>>(std::move(params));
+                                                   ComputeDataType>>(
+            LayernormFpropParams(*tensorMap.at(nodeAttributes->x_tensor_uid()),
+                                 *tensorMap.at(nodeAttributes->y_tensor_uid()),
+                                 *tensorMap.at(nodeAttributes->epsilon_tensor_uid()),
+                                 *tensorMap.at(nodeAttributes->scale_tensor_uid()),
+                                 *tensorMap.at(nodeAttributes->bias_tensor_uid()),
+                                 nodeAttributes->normalized_dim_count(),
+                                 mean,
+                                 invVariance));
     }
 };
 } // namespace hipdnn_test_sdk::detail

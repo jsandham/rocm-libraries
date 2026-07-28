@@ -95,6 +95,8 @@ public:
         CHECK_TENSOR_TYPE(tensorMap, nodeAttributes->in_tensor_uid(), XDataTypeEnum);
         CHECK_TENSOR_TYPE(tensorMap, nodeAttributes->out_tensor_uid(), YDataTypeEnum);
 
+        CHECK_NO_RAGGED_TENSORS(tensorMap);
+
         return true;
     }
 
@@ -109,12 +111,11 @@ public:
         }
 
         const auto& tensorMap = graph.getTensorMap();
-        ReductionParams params(*tensorMap.at(nodeAttributes->in_tensor_uid()),
-                               *tensorMap.at(nodeAttributes->out_tensor_uid()),
-                               nodeAttributes->mode());
 
         return std::make_unique<ReductionPlan<XDataType, YDataType, ComputeDataType>>(
-            std::move(params));
+            ReductionParams(*tensorMap.at(nodeAttributes->in_tensor_uid()),
+                            *tensorMap.at(nodeAttributes->out_tensor_uid()),
+                            nodeAttributes->mode()));
     }
 };
 

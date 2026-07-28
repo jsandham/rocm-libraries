@@ -2,9 +2,9 @@ TestParameters:
   marks: [skip-gfx900, skip-gfx906, skip-gfx908, skip-gfx90a, skip-gfx940, skip-gfx941, skip-gfx942, skip-gfx950, skip-gfx1010, skip-gfx1011, skip-gfx1012, skip-gfx1030, skip-gfx1100, skip-gfx1101, skip-gfx1102, skip-gfx1200, skip-gfx1201] # not supported by arch
 
 GlobalParameters:
+  SyncsPerBenchmark: 0
   NumElementsToValidate: -1
-  NewClient: 2
-  BoundsCheck: False
+  BoundsCheck: 0
   PrintSolutionRejectionReason: True
   ValidationMaxToPrint: 4      # maximum number of mismatches to print
   ValidationPrintValids: False # print matches too
@@ -19,7 +19,6 @@ GlobalParameters:
   NumWarmups: 1
   EnqueuesPerSync: 1
   PrintWinnersOnly: True
-  MinKForGSU: 1
   Architecture: gfx1250
 
 BenchmarkProblems:
@@ -68,12 +67,12 @@ BenchmarkProblems:
         - PrefetchLocalRead: [1] #
         - PrefetchGlobalRead: [2] #
         - StoreRemapVectorWidth: [0]
-        - GlobalSplitU: [1]
-        - GlobalSplitUAlgorithm: [MultipleBuffer]
+        - GlobalSplitU: [2]
+        - GlobalSplitUAlgorithm: [MultipleBufferSingleKernel]
         - GlobalReadVectorWidthA: [-1]
         - GlobalReadVectorWidthB: [-1]
         - 1LDSBuffer: [-1]
-        - DirectToVgprSparseMetadata: [0]
+        - DirectToVgprSparseMetadata: [false]
         - WorkGroupMapping: [1]
         - StoreVectorWidth: [-1]
         - DirectToVgprA: [False]
@@ -145,7 +144,7 @@ BenchmarkProblems:
         - GlobalReadVectorWidthA: [-1]
         - GlobalReadVectorWidthB: [-1]
         - 1LDSBuffer: [-1]
-        - DirectToVgprSparseMetadata: [0]
+        - DirectToVgprSparseMetadata: [false]
         - WorkGroupMapping: [1]
         - StoreVectorWidth: [-1]
         - DirectToVgprA: [False]
@@ -211,12 +210,12 @@ BenchmarkProblems:
         - PrefetchLocalRead: [1] #
         - PrefetchGlobalRead: [2] #
         - StoreRemapVectorWidth: [0]
-        - GlobalSplitU: [1]
-        - GlobalSplitUAlgorithm: [MultipleBuffer]
+        - GlobalSplitU: [2]
+        - GlobalSplitUAlgorithm: [MultipleBufferSingleKernel]
         - GlobalReadVectorWidthA: [-1]
         - GlobalReadVectorWidthB: [-1]
         - 1LDSBuffer: [-1]
-        - DirectToVgprSparseMetadata: [0]
+        - DirectToVgprSparseMetadata: [false]
         - WorkGroupMapping: [1]
         - StoreVectorWidth: [-1]
         - DirectToVgprA: [False]
@@ -287,7 +286,7 @@ BenchmarkProblems:
         - GlobalReadVectorWidthA: [-1]
         - GlobalReadVectorWidthB: [-1]
         - 1LDSBuffer: [-1]
-        - DirectToVgprSparseMetadata: [0]
+        - DirectToVgprSparseMetadata: [false]
         - WorkGroupMapping: [1]
         - StoreVectorWidth: [-1]
         - DirectToVgprA: [False]

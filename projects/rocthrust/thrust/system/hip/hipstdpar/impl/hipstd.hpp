@@ -1,4 +1,4 @@
-// Copyright (c) 2024-2025 Advanced Micro Devices, Inc. All rights reserved.
+// Copyright (c) 2024-2026 Advanced Micro Devices, Inc. All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -43,17 +43,85 @@
 
 #if defined(__HIPSTDPAR__)
 
+#  include <thrust/detail/config/namespace.h>
+#  include <thrust/system/hip/detail/util.h>
+
+#  include <hip/hip_runtime_api.h>
+
 #  include <cstddef>
+#  include <cstdio>
+#  include <cstdlib>
 #  include <iterator>
+#  include <mutex>
 #  include <new>
 #  include <type_traits>
 #  include <utility>
 
-#  include <hip/hip_runtime_api.h>
-#  include <thrust/system/hip/detail/util.h>
-
 namespace hipstd
 {
+// Emits a one-time stderr warning when host-allocated memory may not be directly
+// accessible on the device and -hipstdpar-interpose-alloc was not used.
+//
+// On Linux: warns when the current GPU is XNACK-capable but XNACK is disabled at
+//   runtime (gcnArchName contains "xnack-").  No warning if XNACK is on ("xnack+")
+//   or the GPU does not support XNACK at all.
+// On Windows: XNACK is never available, so warns unconditionally — without
+//   interpose-alloc, host memory is never device-accessible on this platform.
+//
+// Suppressed on both platforms when __HIPSTDPAR_INTERPOSE_ALLOC__ or
+// __HIPSTDPAR_INTERPOSE_ALLOC_V1__ is defined, since interpose-alloc replaces
+// allocations with hipMallocManaged, making XNACK unnecessary.
+inline void warn_if_no_xnack()
+{
+#  if !defined(__HIPSTDPAR_INTERPOSE_ALLOC__) && !defined(__HIPSTDPAR_INTERPOSE_ALLOC_V1__)
+  static ::std::once_flag xnack_flag_;
+  ::std::call_once(xnack_flag_, [] {
+#    if defined(__linux__)
+    int device = 0;
+    if (::hipGetDevice(&device) != hipSuccess)
+    {
+      return;
+    }
+    ::hipDeviceProp_t prop{};
+    if (::hipGetDeviceProperties(&prop, device) != hipSuccess)
+    {
+      return;
+    }
+    // gcnArchName contains "xnack+" when XNACK is enabled and "xnack-" when the
+    // GPU supports XNACK but it is currently disabled.  Warn only in the latter case.
+    const char* needle = "xnack-";
+    for (const char* arch = prop.gcnArchName; *arch != '\0'; ++arch)
+    {
+      const char* a = arch;
+      const char* n = needle;
+      while (*n != '\0' && *a == *n)
+      {
+        ++a;
+        ++n;
+      }
+      if (*n == '\0')
+      {
+        ::std::fputs(
+          "hipstdpar warning: the current GPU is XNACK-capable but XNACK is disabled. "
+          "Host-allocated memory may not be directly accessible on the device. "
+          "Enable XNACK (e.g. set HSA_XNACK=1, or add amdgpu.xnack=1 to the kernel "
+          "command line) or recompile with -hipstdpar-interpose-alloc to suppress "
+          "this warning.\n",
+          stderr);
+        return;
+      }
+    }
+#    else // Windows
+    ::std::fputs(
+      "hipstdpar warning: XNACK is not supported on this platform. "
+      "Host-allocated memory is not directly accessible on the device. "
+      "Recompile with -hipstdpar-interpose-alloc to suppress this warning.\n",
+      stderr);
+#    endif // Windows
+  });
+#  endif // !__HIPSTDPAR_INTERPOSE_ALLOC__ && !__HIPSTDPAR_INTERPOSE_ALLOC_V1__
+}
+
 template <typename... Cs>
 inline constexpr bool is_offloadable_callable() noexcept
 {
@@ -101,6 +169,8 @@ inline constexpr
   unsupported_iterator_category() noexcept
 {}
 
+void __maybe_bind_globals(); // Forward declaration, defined in global_interposition.hpp
+
 namespace detail
 {
 
@@ -125,7 +195,7 @@ public:
 #  else
     hipError_t status = ::hipMalloc(reinterpret_cast<void**>(&fn_ptr_), sizeof(Fn));
 #  endif
-    ::thrust::hip_rocprim::throw_on_error(status, "hipstdpar: failed to allocate device callable");
+    THRUST_NS_QUALIFIER::hip_rocprim::throw_on_error(status, "hipstdpar: failed to allocate device callable");
     ::new (static_cast<void*>(fn_ptr_)) Fn(::std::move(fn));
   }
 
@@ -155,7 +225,7 @@ public:
     fn_ptr_->~Fn();
     hipError_t status = ::hipFree(fn_ptr_);
     fn_ptr_           = nullptr;
-    ::thrust::hip_rocprim::throw_on_error(status, "hipstdpar: failed to free device callable");
+    THRUST_NS_QUALIFIER::hip_rocprim::throw_on_error(status, "hipstdpar: failed to free device callable");
   }
 
 private:

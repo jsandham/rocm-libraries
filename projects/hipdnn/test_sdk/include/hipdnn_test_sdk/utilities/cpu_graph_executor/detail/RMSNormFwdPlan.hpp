@@ -83,8 +83,9 @@ public:
         auto shallowScaleTensor = createShallowTensor<ScaleDataType>(
             _params.scaleTensor, variantPack.at(_params.scaleTensor.uid));
 
-        const double epsilon = hipdnn_flatbuffers_sdk::utilities::extractDoubleFromTensorValue(
-            _params.epsilonTensor, "Epsilon");
+        const double epsilon
+            = hipdnn_flatbuffers_sdk::utilities::resolveDoubleScalarFromVariantPack(
+                _params.epsilonTensor, variantPack, "Epsilon");
 
         std::unique_ptr<hipdnn_data_sdk::utilities::TensorBase<ScaleDataType>> shallowBiasTensor;
         if(_params.biasTensor.has_value())
@@ -169,6 +170,8 @@ public:
                 tensorMap, nodeAttributes->inv_rms_tensor_uid().value(), ComputeDataTypeEnum);
         }
 
+        CHECK_NO_RAGGED_TENSORS(tensorMap);
+
         return true;
     }
 
@@ -191,16 +194,14 @@ public:
                                   ? tensorMap.at(nodeAttributes->bias_tensor_uid().value())
                                   : nullptr;
 
-        RMSNormFwdParams params(*tensorMap.at(nodeAttributes->x_tensor_uid()),
-                                *tensorMap.at(nodeAttributes->scale_tensor_uid()),
-                                *tensorMap.at(nodeAttributes->epsilon_tensor_uid()),
-                                *tensorMap.at(nodeAttributes->y_tensor_uid()),
-                                invRmsPtr,
-                                biasPtr);
-
         return std::make_unique<
             RMSNormFwdPlan<XDataType, ScaleDataType, OutputDataType, ComputeDataType>>(
-            std::move(params));
+            RMSNormFwdParams(*tensorMap.at(nodeAttributes->x_tensor_uid()),
+                             *tensorMap.at(nodeAttributes->scale_tensor_uid()),
+                             *tensorMap.at(nodeAttributes->epsilon_tensor_uid()),
+                             *tensorMap.at(nodeAttributes->y_tensor_uid()),
+                             invRmsPtr,
+                             biasPtr));
     }
 };
 } // namespace hipdnn_test_sdk::detail

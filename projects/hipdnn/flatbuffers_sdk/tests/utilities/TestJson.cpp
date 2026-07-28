@@ -12,6 +12,7 @@
 #include <hipdnn_flatbuffers_sdk/data_objects/tensor_attributes_generated.h>
 #include <hipdnn_flatbuffers_sdk/utilities/json/Common.hpp>
 #include <hipdnn_flatbuffers_sdk/utilities/json/Graph.hpp>
+#include <hipdnn_flatbuffers_sdk/utilities/json/TensorAttributes.hpp>
 #include <hipdnn_test_sdk/utilities/FlatbufferGraphTestUtils.hpp>
 #include <hipdnn_test_sdk/utilities/TestUtilities.hpp>
 
@@ -134,6 +135,11 @@ TEST(TestJson, GraphToJsonAndBack)
             graph = hipdnn_flatbuffers_sdk::data_objects::GetGraph(graphBuilder.GetBufferPointer());
             context = "(valid layernorm graph)";
             break;
+        case hipdnn_flatbuffers_sdk::data_objects::NodeAttributes::LayernormBackwardAttributes:
+            graphBuilder = hipdnn_test_sdk::utilities::createValidLayernormBwdGraph();
+            graph = hipdnn_flatbuffers_sdk::data_objects::GetGraph(graphBuilder.GetBufferPointer());
+            context = "(valid layernorm backward graph)";
+            break;
         case hipdnn_flatbuffers_sdk::data_objects::NodeAttributes::RMSNormAttributes:
             graphBuilder = hipdnn_test_sdk::utilities::createValidRMSNormGraph();
             graph = hipdnn_flatbuffers_sdk::data_objects::GetGraph(graphBuilder.GetBufferPointer());
@@ -168,6 +174,11 @@ TEST(TestJson, GraphToJsonAndBack)
             graphBuilder = hipdnn_test_sdk::utilities::createValidReductionGraph();
             graph = hipdnn_flatbuffers_sdk::data_objects::GetGraph(graphBuilder.GetBufferPointer());
             context = "(valid reduction graph)";
+            break;
+        case hipdnn_flatbuffers_sdk::data_objects::NodeAttributes::ResampleFwdAttributes:
+            graphBuilder = hipdnn_test_sdk::utilities::createValidResampleFwdGraph();
+            graph = hipdnn_flatbuffers_sdk::data_objects::GetGraph(graphBuilder.GetBufferPointer());
+            context = "(valid resample fwd graph)";
             break;
         default:
             FAIL() << "Unhandled NodeAttributes enum value";
@@ -330,6 +341,130 @@ TEST(TestJson, FlatbufferNullStringVectorToJson)
     flatbuffers::to_json(j, sc->valid_values());
     ASSERT_TRUE(j.is_array());
     EXPECT_EQ(j.size(), 0u);
+}
+
+TEST(TestJson, TensorAttributesBoolValueRoundTrip)
+{
+    for(const bool boolVal : {true, false})
+    {
+        flatbuffers::FlatBufferBuilder builder;
+        const std::vector<int64_t> dims = {1};
+        const std::vector<int64_t> strides = {1};
+        const BoolValue value(boolVal);
+        auto valueOffset = builder.CreateStruct(value).Union();
+        auto attrOffset = CreateTensorAttributesDirect(builder,
+                                                       /*uid*/ 7,
+                                                       /*name*/ "boolean_attr",
+                                                       DataType::BOOLEAN,
+                                                       &strides,
+                                                       &dims,
+                                                       /*virtual*/ false,
+                                                       TensorValue::BoolValue,
+                                                       valueOffset);
+        builder.Finish(attrOffset);
+
+        auto* attr = flatbuffers::GetRoot<TensorAttributes>(builder.GetBufferPointer());
+
+        const nlohmann::json attrJson = *attr;
+
+        EXPECT_EQ(attrJson.at("value_type").get<TensorValue>(), TensorValue::BoolValue);
+        EXPECT_EQ(attrJson.at("value").get<bool>(), boolVal);
+
+        flatbuffers::FlatBufferBuilder roundTripBuilder;
+        auto newAttrOffset
+            = hipdnn_flatbuffers_sdk::json::to<TensorAttributes>(roundTripBuilder, attrJson);
+        roundTripBuilder.Finish(newAttrOffset);
+
+        auto* newAttr = flatbuffers::GetRoot<TensorAttributes>(roundTripBuilder.GetBufferPointer());
+
+        ASSERT_EQ(newAttr->value_type(), TensorValue::BoolValue);
+        ASSERT_NE(newAttr->value_as_BoolValue(), nullptr);
+        EXPECT_EQ(newAttr->value_as_BoolValue()->value(), boolVal);
+    }
+}
+
+TEST(TestJson, TensorAttributesRaggedOffsetAndAlignmentRoundTrip)
+{
+    const int64_t uid = 5;
+    const int64_t raggedOffsetUid = 42;
+    const int64_t alignment = 128;
+    const std::vector<int64_t> dims = {4, 8, 1, 1};
+    const std::vector<int64_t> strides = {8, 1, 1, 1};
+
+    flatbuffers::FlatBufferBuilder builder;
+    auto attrOffset = CreateTensorAttributesDirect(builder,
+                                                   uid,
+                                                   "ragged_primary",
+                                                   DataType::FLOAT,
+                                                   &strides,
+                                                   &dims,
+                                                   /*virtual*/ false,
+                                                   TensorValue::NONE,
+                                                   /*value*/ 0,
+                                                   false,
+                                                   flatbuffers::Optional<int64_t>(raggedOffsetUid),
+                                                   alignment);
+    builder.Finish(attrOffset);
+
+    auto* attr = flatbuffers::GetRoot<TensorAttributes>(builder.GetBufferPointer());
+
+    // Verify fields before JSON round-trip
+    ASSERT_TRUE(attr->ragged_offset_tensor_uid().has_value());
+    EXPECT_EQ(attr->ragged_offset_tensor_uid().value(), raggedOffsetUid);
+    EXPECT_EQ(attr->alignment(), alignment);
+
+    // JSON round-trip
+    const nlohmann::json attrJson = *attr;
+    EXPECT_EQ(attrJson.at("ragged_offset_tensor_uid").get<int64_t>(), raggedOffsetUid);
+    EXPECT_EQ(attrJson.at("alignment").get<int64_t>(), alignment);
+
+    flatbuffers::FlatBufferBuilder roundTripBuilder;
+    auto newAttrOffset
+        = hipdnn_flatbuffers_sdk::json::to<TensorAttributes>(roundTripBuilder, attrJson);
+    roundTripBuilder.Finish(newAttrOffset);
+
+    auto* newAttr = flatbuffers::GetRoot<TensorAttributes>(roundTripBuilder.GetBufferPointer());
+    ASSERT_TRUE(newAttr->ragged_offset_tensor_uid().has_value());
+    EXPECT_EQ(newAttr->ragged_offset_tensor_uid().value(), raggedOffsetUid);
+    EXPECT_EQ(newAttr->alignment(), alignment);
+}
+
+TEST(TestJson, TensorAttributesDefaultAlignmentAndNoRaggedOffset)
+{
+    const std::vector<int64_t> dims = {1, 1, 1, 1};
+    const std::vector<int64_t> strides = {1, 1, 1, 1};
+
+    flatbuffers::FlatBufferBuilder builder;
+    auto attrOffset = CreateTensorAttributesDirect(
+        builder, 1, "plain", DataType::FLOAT, &strides, &dims, false);
+    builder.Finish(attrOffset);
+
+    auto* attr = flatbuffers::GetRoot<TensorAttributes>(builder.GetBufferPointer());
+    EXPECT_FALSE(attr->ragged_offset_tensor_uid().has_value());
+    EXPECT_EQ(attr->alignment(), 16);
+
+    const nlohmann::json attrJson = *attr;
+    EXPECT_FALSE(attrJson.contains("ragged_offset_tensor_uid"));
+    EXPECT_EQ(attrJson.at("alignment").get<int64_t>(), 16);
+}
+
+TEST(TestJson, TensorAttributesLegacyJsonMissingAlignmentDefaultsTo16)
+{
+    // Simulate legacy JSON that lacks the alignment and ragged_offset_tensor_uid fields
+    const nlohmann::json legacyJson = {{"uid", 1},
+                                       {"name", "legacy"},
+                                       {"data_type", DataType::FLOAT},
+                                       {"dims", std::vector<int64_t>{1, 1, 1, 1}},
+                                       {"strides", std::vector<int64_t>{1, 1, 1, 1}},
+                                       {"virtual", false}};
+
+    flatbuffers::FlatBufferBuilder builder;
+    auto attrOffset = hipdnn_flatbuffers_sdk::json::to<TensorAttributes>(builder, legacyJson);
+    builder.Finish(attrOffset);
+
+    auto* attr = flatbuffers::GetRoot<TensorAttributes>(builder.GetBufferPointer());
+    EXPECT_FALSE(attr->ragged_offset_tensor_uid().has_value());
+    EXPECT_EQ(attr->alignment(), 16);
 }
 
 #endif // HIPDNN_FLATBUFFERS_SDK_SKIP_JSON_LIB

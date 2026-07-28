@@ -1,6 +1,6 @@
 ################################################################################
 #
-# Copyright (C) 2022-2025 Advanced Micro Devices, Inc. All rights reserved.
+# Copyright (C) 2022-2026 Advanced Micro Devices, Inc. All rights reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -32,7 +32,7 @@ from Tensile.Common.Architectures import gfxToIsa
 from Tensile.Common.DataType import DataType
 from Tensile.Common.GlobalParameters import internalParameters
 from Tensile.SolutionStructs import Solution as OriginalSolution
-from Tensile.SolutionStructs.Problem import getBiasDataTypeListDefault
+from Tensile.SolutionStructs.Problem import getBiasDataTypeListDefault, getGateResidualDataTypeListDefault
 from Tensile.Toolchain.Component import Assembler
 from math import ceil
 
@@ -68,11 +68,11 @@ class BoundIndex:
 
 class ProblemType:
     StateKeys = ['operationIdentifier', 'transA', 'transB', 'computeInputTypeA', 'computeInputTypeB', 'aType', 'bType', 'cType', 'dType', 'eType', 'computeType',
-                 'useBeta', 'useBias', 'biasSrcWhiteList', 'useE', 'useScaleAB', 'useScaleCD', 'useScaleAlphaVec', 'biasDataTypeWhiteList',
+                 'useBeta', 'useBias', 'biasSrcWhiteList', 'useE', 'useGateResidual', 'gateResidualDataTypeWhiteList', 'useScaleAB', 'useScaleCD', 'useScaleAlphaVec', 'biasDataTypeWhiteList',
                  'highPrecisionAccumulate', 'useInitialStridesAB', 'useInitialStridesCD', 'stridedBatched', 'groupedGemm',
                  'useGradient', 'activationType', 'activationArgLength', 'activationComputeDataType', 'activationNoGuard',
                  'sparse', 'f32XdlMathOp', 'supportDeviceUserArguments', 'outputAmaxD', 'swizzleTensorA', 'swizzleTensorB', 'metadataLayout',
-                 'mxBlockA', 'mxBlockB', 'mxTypeA', 'mxTypeB']
+                 'mxBlockA', 'mxBlockB', 'mxTypeA', 'mxTypeB', 'mxScaleFormat']
     @classmethod
     def FromOriginalState(cls, d):
         indices = [None]*d['TotalIndices']
@@ -133,8 +133,8 @@ class ProblemType:
 
         rv.transA = bool(d['TransposeA'])
         rv.transB = bool(d['TransposeB'])
-        # it will either be set as d['MacDataType'] or a specified input
-        if 'MacDataTypeA' in d: 
+
+        if 'MacDataTypeA' in d: #it will either be set as d['MacDataType'] or a specified input
             rv.computeInputTypeA = DataType(d['MacDataTypeA'])
         else:
             rv.computeInputTypeA = srcType
@@ -237,6 +237,19 @@ class ProblemType:
         if 'UseE' in d:
             rv.useE = d['UseE']
 
+        rv.useGateResidual = False
+        rv.gateResidualDataTypeWhiteList = []
+        rv.setConstStrideGate = []
+        if 'UseGateResidual' in d:
+            rv.useGateResidual = bool(d['UseGateResidual'])
+            if 'GateResidualDataTypeList' in d:
+                d["GateResidualDataTypeList"].sort()  # Sort to make sure names are unique
+                rv.gateResidualDataTypeWhiteList = d['GateResidualDataTypeList']
+            else:
+                rv.gateResidualDataTypeWhiteList = getGateResidualDataTypeListDefault(d)
+            if 'SetConstStrideGate' in d:
+                rv.setConstStrideGate = d['SetConstStrideGate']
+
         rv.useGradient = False
         if 'Gradient' in d:
             rv.useGradient = d["Gradient"]
@@ -284,6 +297,8 @@ class ProblemType:
         rv.mxBlockB = d.get('MXBlockB', 0)
         rv.mxTypeA = DataType(d['DataTypeMXSA']) if 'DataTypeMXSA' in d else DataType(0)
         rv.mxTypeB = DataType(d['DataTypeMXSB']) if 'DataTypeMXSB' in d else DataType(0)
+        # mxScaleFormat is a Solution-level parameter and is populated by
+        # Solution.FromOriginalState, which has access to the parent dict.
 
         rv.metadataLayout = 0
         if 'MetadataLayout' in d:
@@ -378,6 +393,7 @@ class ProblemType:
             if not self.useBeta:
                 predicates.append(ProblemPredicate("BetaZero"))
             predicates.append(ProblemPredicate("BiasDataTypeWhiteList", value=self.biasDataTypeWhiteList))
+            predicates.append(ProblemPredicate("GateResidualDataTypeWhiteList", value=self.gateResidualDataTypeWhiteList))
             predicates.append(ProblemPredicate("BiasSrcWhiteList", value=self.biasSrcWhiteList))
             predicates.append(ProblemPredicate("AmaxDCheck", value=self.outputAmaxD))
             if self.activationType in ['all', 'hipblaslt_all']:
@@ -397,6 +413,7 @@ class ProblemType:
             predicates.append(ProblemPredicate("UseGradient", value=self.useGradient))
             predicates.append(ProblemPredicate("UseBias", value=self.useBias))
             predicates.append(ProblemPredicate("UseE", value=self.useE))
+            predicates.append(ProblemPredicate("UseGateResidual", value=self.useGateResidual))
             predicates.append(ProblemPredicate("DataTypeE", value=self.eType))
             predicates.append(ProblemPredicate("StridedBatched", value=self.stridedBatched))
             predicates.append(ProblemPredicate("GroupedGemm", value=self.groupedGemm))
@@ -414,7 +431,6 @@ class ProblemType:
             predicates.append(ProblemPredicate("MXBlockB", value=self.mxBlockB))
             if self.mxBlockB:
                 predicates.append(ProblemPredicate("DataTypeMXSB", value=self.mxTypeB))
-
         return predicates
 
 def extractDimPredicate(cls, key, value, predicateName):
@@ -466,16 +482,6 @@ class ProblemPredicate(Properties.Predicate):
             return cls("AIGreaterThanEqual", value=value) if value > 0 else None
         if key == "AssertAILessThanEqual":
             return cls("AILessThanEqual", value=value) if value > 0 else None
-
-        # Address-interleave restriction:
-        # Require tiles1 = Free1Size / MT1 to be a power-of-two (and divisible).
-        if key == "AssertFree1DivByMT1LowbitGT1":
-            return cls("Free1SizeDivByValueLowbitGT1", index=0, value=value) if value > 0 else None
-
-        # KRingShift wrap restriction (packed value; see Solution.py):
-        # Require that any (k + KRingShift) wrap occurs only in tail loop (no main-loop wrap).
-        if key == "AssertKRingShiftTailWrapOnly":
-            return cls("KRingShiftTailWrapOnly", index=-1, value=value) if value > 0 else None
 
         if key.endswith('Multiple'):
             if value == 1:
@@ -595,6 +601,14 @@ class ProblemPredicate(Properties.Predicate):
         if state['ProblemType']['SwizzleTensorB']:
             rv += [cls('SwizzleTensorB', value=state['ProblemType']['SwizzleTensorB'])]
 
+        valuepredicates = []
+        valuepredicates.append(state["MacroTile0"])
+        valuepredicates.append(state["MacroTile1"])
+        valuepredicates.append(state["GlobalSplitU"])
+        valuepredicates.append(state["ClusterDim"][0])
+        valuepredicates.append(state["ClusterDim"][1])
+        rv += [cls('ClusterDimCheck', value=valuepredicates)]
+
         return rv
 
     @classmethod
@@ -626,7 +640,9 @@ class SizeMapping:
                  'packBatchDims',
                  'magicDivAlg',
                  'streamK',
+                 'streamKForceDPOnly',
                  'streamKAtomic',
+                 'prefetchAcrossPersistent',
                  'sourceKernel',
                  'globalAccumulation',
                  'adaptiveGemmGSUA',
@@ -644,7 +660,9 @@ class SizeMapping:
                  'synchronizerSizePerWG',
                  'nonTemporalA',
                  'nonTemporalB',
+                 'adaptiveGemmNTAB',
                  'customMainLoopScheduling',
+                 'useSubtileImpl',
                  'NonTemporalD',
                  'WaveSeparateGlobalReadA',
                  'WaveSeparateGlobalReadB',
@@ -658,7 +676,9 @@ class SizeMapping:
                  'VectorWidthB',
                  'LocalSplitU',
                  'DirectToLdsA',
-                 'DirectToLdsB'
+                 'DirectToLdsB',
+                 'ExpertSchedulingMode',
+                 'clusterDim'
                  ]
 
     @classmethod
@@ -714,7 +734,9 @@ class SizeMapping:
                    staggerStrideShift       = d['_staggerStrideShift'] if '_staggerStrideShift' in d else 0,
                    packBatchDims            = 0,
                    streamK                  = d['StreamK'] if 'StreamK' in d else 0,
+                   streamKForceDPOnly       = d.get('StreamKForceDPOnly', 0),
                    streamKAtomic            = d['StreamKAtomic'] if 'StreamKAtomic' in d else 0,
+                   prefetchAcrossPersistent = d.get('PrefetchAcrossPersistent', 0),
                    magicDivAlg              = d.get('MagicDivAlg', 1),
                    sourceKernel             = d['KernelLanguage'] == 'Source',
                    globalAccumulation       = globalAccum,
@@ -733,7 +755,9 @@ class SizeMapping:
                    synchronizerSizePerWG    = synchronizerSizePerWG,
                    nonTemporalA             = d['NonTemporalA'],
                    nonTemporalB             = d['NonTemporalB'],
+                   adaptiveGemmNTAB         = d['AdaptiveGemmNTAB'] if 'AdaptiveGemmNTAB' in d else 0,
                    customMainLoopScheduling = d['UseCustomMainLoopSchedule'],
+                   useSubtileImpl           = bool(d.get('UseSubtileImpl', False)),
                    NonTemporalD             = d['NonTemporalD'],
                    WaveSeparateGlobalReadA  = d['WaveSeparateGlobalReadA'],
                    WaveSeparateGlobalReadB  = d['WaveSeparateGlobalReadB'],
@@ -748,6 +772,8 @@ class SizeMapping:
                    LocalSplitU              = d["LocalSplitU"],
                    DirectToLdsA             = dtlA,
                    DirectToLdsB             = dtlB,
+                   ExpertSchedulingMode     = d['ExpertSchedulingMode'],
+                   clusterDim               = d['ClusterDim']
                    )
     @classmethod
     def ReadOriginalMacroTile(cls, d):
@@ -818,7 +844,8 @@ class Solution:
                    printIndexAssignmentInfo,
                    assembler,
                    isaInfoMap,
-                   solution.srcName
+                   solution.srcName,
+                   raiseProblemTypeOnTypeMismatch=False,
                )
 
     @classmethod
@@ -832,7 +859,9 @@ class Solution:
             assembler,
             isaInfoMap,
             srcName = "",
-            deviceInfo=None
+            deviceInfo=None,
+            *,
+            raiseProblemTypeOnTypeMismatch: bool = True,
         ):
         rv = cls()
 
@@ -843,6 +872,14 @@ class Solution:
             rv.kernelName = d['KernelNameMin']
 
         rv.problemType = ProblemType.FromOriginalState(d['ProblemType'])
+
+        # MXScaleFormat is a Solution-level knob (lives in d, not d['ProblemType']),
+        # but it describes the in-device MX scale layout the kernel expects, which
+        # the host (DataInitialization) needs to know to pick an upload layout.
+        # Plumb it onto problemType so the host can read it post-solution-pick.
+        rv.problemType.mxScaleFormat = {"NoSwizzle": 0,
+                                        "HostPreSwizzle": 1,
+                                        "InMemorySwizzle": 2}.get(d.get("MXScaleFormat", "NoSwizzle"), 0)
 
         rv.problemPredicate = ProblemPredicate.FromOriginalState(d, rv.problemType)
         rv.taskPredicate = TaskPredicate.FromOriginalState(d, rv.problemType)
@@ -887,7 +924,8 @@ class Solution:
                                   printIndexAssignmentInfo,
                                   assembler,
                                   isaInfoMap,
-                                  srcName
+                                  srcName,
+                                  raiseProblemTypeOnTypeMismatch=raiseProblemTypeOnTypeMismatch,
                               )
         rv.srcName = srcName
 

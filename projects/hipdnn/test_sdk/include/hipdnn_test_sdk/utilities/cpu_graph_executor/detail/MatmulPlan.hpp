@@ -99,6 +99,8 @@ public:
         CHECK_TENSOR_TYPE(tensorMap, nodeAttributes->b_tensor_uid(), BDataTypeEnum);
         CHECK_TENSOR_TYPE(tensorMap, nodeAttributes->c_tensor_uid(), CDataTypeEnum);
 
+        CHECK_NO_RAGGED_TENSORS(tensorMap);
+
         return true;
     }
 
@@ -113,12 +115,11 @@ public:
         }
 
         const auto& tensorMap = graph.getTensorMap();
-        MatmulParams params(*tensorMap.at(nodeAttributes->a_tensor_uid()),
-                            *tensorMap.at(nodeAttributes->b_tensor_uid()),
-                            *tensorMap.at(nodeAttributes->c_tensor_uid()));
 
         return std::make_unique<MatmulPlan<ADataType, BDataType, CDataType, ComputeDataType>>(
-            std::move(params));
+            MatmulParams(*tensorMap.at(nodeAttributes->a_tensor_uid()),
+                         *tensorMap.at(nodeAttributes->b_tensor_uid()),
+                         *tensorMap.at(nodeAttributes->c_tensor_uid())));
     }
 };
 

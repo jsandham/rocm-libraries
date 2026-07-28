@@ -12,8 +12,8 @@
 #include <hipdnn_flatbuffers_sdk/utilities/FlatbufferUtils.hpp>
 #include <hipdnn_test_sdk/utilities/CpuFpReferenceBatchnorm.hpp>
 #include <hipdnn_test_sdk/utilities/CpuFpReferenceValidation.hpp>
+#include <hipdnn_test_sdk/utilities/DynamicTolerancesBatchNorm.hpp>
 #include <hipdnn_test_sdk/utilities/Seeds.hpp>
-#include <hipdnn_test_sdk/utilities/TestTolerances.hpp>
 #include <hipdnn_test_sdk/utilities/cpu_graph_executor/detail/BatchnormFwdInferenceWithVariancePlan.hpp>
 #include <hipdnn_test_sdk/utilities/cpu_graph_executor/detail/BatchnormFwdInferenceWithVarianceSignatureKey.hpp>
 
@@ -31,7 +31,21 @@ class TestBatchnormFwdWithVariancePlan : public ::testing::Test
 
 TEST_F(TestBatchnormFwdWithVariancePlan, ExecutePlan)
 {
-    auto tolerance = batchnorm::getToleranceInference<float>();
+    // Tensor ranges from BatchnormFwdWithVarianceTensorBundle:
+    // x=[0,1], scale=[0,1], bias=[0,1], mean=[0,1], var=[0.1,1.0]
+    // epsilon = BATCHNORM_DEFAULT_EPSILON = 1e-5
+    auto tolerance = batchnorm::calculateBatchnormInferenceWithVarianceTolerance<float, float>(
+        0.0,
+        1.0,
+        0.0,
+        1.0,
+        0.1,
+        1.0,
+        0.0,
+        1.0,
+        0.0,
+        1.0,
+        hipdnn_data_sdk::utilities::BATCHNORM_DEFAULT_EPSILON);
     const std::vector<int64_t> dims = {6, 3, 32, 32};
     const unsigned int seed = getGlobalTestSeed();
     auto graph = buildBatchnormFwdInferenceWithVarianceGraph(DataType::FLOAT,
@@ -95,6 +109,83 @@ TEST_F(TestBatchnormFwdWithVariancePlan, ExecutePlan)
     EXPECT_TRUE(cpuRefOutputValidation.allClose(
         *directTensorBundle.tensors[attributes.y_tensor_uid()].get(),
         *planTensorBundle.tensors[attributes.y_tensor_uid()].get()));
+}
+
+TEST_F(TestBatchnormFwdWithVariancePlan, ExecutePlanWithRuntimeEpsilonFromPack)
+{
+    const std::vector<int64_t> dims = {6, 3, 32, 32};
+    const unsigned int seed = getGlobalTestSeed();
+
+    // Pure runtime pass-by-value epsilon delivered through the variant pack.
+    auto runtimeGraph = buildBatchnormFwdInferenceWithVarianceGraph(DataType::FLOAT,
+                                                                    DataType::FLOAT,
+                                                                    DataType::FLOAT,
+                                                                    DataType::FLOAT,
+                                                                    dims,
+                                                                    TensorLayout::NHWC,
+                                                                    /*isOutputVirtual=*/false,
+                                                                    /*runtimeEpsilon=*/true);
+    auto [runtimeSerialized, runtimeSerErr] = runtimeGraph->to_binary();
+    ASSERT_TRUE(runtimeSerErr.is_good()) << runtimeSerErr.get_message();
+    const GraphWrapper runtimeWrapper(runtimeSerialized.data(), runtimeSerialized.size());
+    const INodeWrapper& runtimeNode = runtimeWrapper.getNodeWrapper(0);
+    BatchnormFwdWithVarianceTensorBundle runtimeBundle(
+        runtimeNode, runtimeWrapper.getTensorMap(), seed);
+
+    const auto& runtimeAttrs = runtimeNode.attributesAs<
+        hipdnn_flatbuffers_sdk::data_objects::BatchnormInferenceAttributesVarianceExt>();
+
+    const auto epsilonHostValue = static_cast<float>(BATCHNORM_DEFAULT_EPSILON);
+    *static_cast<float*>(runtimeBundle.tensors[runtimeAttrs.epsilon_tensor_uid()]->rawHostData())
+        = epsilonHostValue;
+
+    BatchnormFwdInferenceWithVarianceParams runtimeParams(
+        *runtimeWrapper.getTensorMap().at(runtimeAttrs.x_tensor_uid()),
+        *runtimeWrapper.getTensorMap().at(runtimeAttrs.y_tensor_uid()),
+        *runtimeWrapper.getTensorMap().at(runtimeAttrs.scale_tensor_uid()),
+        *runtimeWrapper.getTensorMap().at(runtimeAttrs.bias_tensor_uid()),
+        *runtimeWrapper.getTensorMap().at(runtimeAttrs.mean_tensor_uid()),
+        *runtimeWrapper.getTensorMap().at(runtimeAttrs.variance_tensor_uid()),
+        *runtimeWrapper.getTensorMap().at(runtimeAttrs.epsilon_tensor_uid()));
+    const std::unordered_map<int64_t, void*> runtimeVariantPack = runtimeBundle.toHostVariantPack();
+    BatchnormFwdInferenceWithVariancePlan<float, float, float, float, float> runtimePlan(
+        std::move(runtimeParams));
+    runtimePlan.execute(runtimeVariantPack);
+
+    // Baked-epsilon reference graph with the same seed and equal epsilon value.
+    auto bakedGraph = buildBatchnormFwdInferenceWithVarianceGraph(DataType::FLOAT,
+                                                                  DataType::FLOAT,
+                                                                  DataType::FLOAT,
+                                                                  DataType::FLOAT,
+                                                                  dims,
+                                                                  TensorLayout::NHWC);
+    auto [bakedSerialized, bakedSerErr] = bakedGraph->to_binary();
+    ASSERT_TRUE(bakedSerErr.is_good()) << bakedSerErr.get_message();
+    const GraphWrapper bakedWrapper(bakedSerialized.data(), bakedSerialized.size());
+    const INodeWrapper& bakedNode = bakedWrapper.getNodeWrapper(0);
+    BatchnormFwdWithVarianceTensorBundle bakedBundle(bakedNode, bakedWrapper.getTensorMap(), seed);
+
+    const auto& bakedAttrs = bakedNode.attributesAs<
+        hipdnn_flatbuffers_sdk::data_objects::BatchnormInferenceAttributesVarianceExt>();
+    BatchnormFwdInferenceWithVarianceParams bakedParams(
+        *bakedWrapper.getTensorMap().at(bakedAttrs.x_tensor_uid()),
+        *bakedWrapper.getTensorMap().at(bakedAttrs.y_tensor_uid()),
+        *bakedWrapper.getTensorMap().at(bakedAttrs.scale_tensor_uid()),
+        *bakedWrapper.getTensorMap().at(bakedAttrs.bias_tensor_uid()),
+        *bakedWrapper.getTensorMap().at(bakedAttrs.mean_tensor_uid()),
+        *bakedWrapper.getTensorMap().at(bakedAttrs.variance_tensor_uid()),
+        *bakedWrapper.getTensorMap().at(bakedAttrs.epsilon_tensor_uid()));
+    const std::unordered_map<int64_t, void*> bakedVariantPack = bakedBundle.toHostVariantPack();
+    BatchnormFwdInferenceWithVariancePlan<float, float, float, float, float> bakedPlan(
+        std::move(bakedParams));
+    bakedPlan.execute(bakedVariantPack);
+
+    auto tolerance = batchnorm::calculateBatchnormInferenceWithVarianceTolerance<float, float>(
+        0.0, 1.0, 0.0, 1.0, 0.1, 1.0, 0.0, 1.0, 0.0, 1.0, BATCHNORM_DEFAULT_EPSILON);
+    const CpuFpReferenceValidation<float> cpuRefOutputValidation(tolerance, tolerance);
+    EXPECT_TRUE(
+        cpuRefOutputValidation.allClose(*bakedBundle.tensors[bakedAttrs.y_tensor_uid()].get(),
+                                        *runtimeBundle.tensors[runtimeAttrs.y_tensor_uid()].get()));
 }
 
 TEST(TestBatchnormFwdWithVariancePlanBuilder, PlanConstruction)

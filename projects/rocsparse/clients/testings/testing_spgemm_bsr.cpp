@@ -1,5 +1,5 @@
 /* ************************************************************************
- * Copyright (C) 2022-2025 Advanced Micro Devices, Inc. All rights Reserved.
+ * Copyright (C) 2022-2026 Advanced Micro Devices, Inc. All rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,8 +25,8 @@
 #include "testing.hpp"
 
 template <typename T, typename I = rocsparse_int, typename J = rocsparse_int>
-rocsparse_status rocsparse_bsr_set_pointers(rocsparse_spmat_descr         descr,
-                                            device_gebsr_matrix<T, I, J>& bsr_matrix)
+rocsparse_status test_bsr_set_pointers(rocsparse_spmat_descr         descr,
+                                       device_gebsr_matrix<T, I, J>& bsr_matrix)
 {
     return rocsparse_bsr_set_pointers(descr, bsr_matrix.ptr, bsr_matrix.ind, bsr_matrix.val);
 }
@@ -408,8 +408,9 @@ void testing_spgemm_bsr(const Arguments& arg)
 
     if(nnzb_C > 0)
     {
-        dC.define(dC.block_direction, dC.mb, dC.nb, nnzb_C, dC.row_block_dim, dC.col_block_dim, dC.base);
-        CHECK_ROCSPARSE_ERROR(rocsparse_bsr_set_pointers(C, dC));
+        dC.define(
+            dC.block_direction, dC.mb, dC.nb, nnzb_C, dC.row_block_dim, dC.col_block_dim, dC.base);
+        CHECK_ROCSPARSE_ERROR(test_bsr_set_pointers(C, dC));
     }
 
     if(arg.unit_check)
@@ -435,7 +436,8 @@ void testing_spgemm_bsr(const Arguments& arg)
                                    hC.base,
                                    hD.base);
 
-        hC.define(hC.block_direction, hC.mb, hC.nb, hC_nnzb, hC.row_block_dim, hC.col_block_dim, hC.base);
+        hC.define(
+            hC.block_direction, hC.mb, hC.nb, hC_nnzb, hC.row_block_dim, hC.col_block_dim, hC.base);
 
         host_bsrgemm<T, I, J>(dir,
                               hA.mb,

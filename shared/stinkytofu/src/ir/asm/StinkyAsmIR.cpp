@@ -62,7 +62,7 @@ void StinkyInstruction::dump(std::ostream& out) const {
 //----------------------------------------------------------------------
 StinkyInstruction* AsmIRBuilder::createLabel(const std::string& label, uint16_t alignment) {
     static const HwInstDesc labelMCID{
-        GFX::LABEL, GFX::LABEL, 0, 0, "LABEL", makeFlagSet({InstFlag::IF_HasSideEffect})};
+        GFX::LABEL, GFX::LABEL, 0, 0, 0, "LABEL", makeFlagSet({InstFlag::IF_HasSideEffect})};
 
     StinkyInstruction* labelInst = create(&labelMCID);
     labelInst->addModifier<LabelData>(LabelData{label, alignment});
@@ -70,8 +70,8 @@ StinkyInstruction* AsmIRBuilder::createLabel(const std::string& label, uint16_t 
 }
 
 StinkyInstruction* AsmIRBuilder::createPhi(RegType type, unsigned regIdx, IRBase* insertPt) {
-    static const HwInstDesc phiMCID{GFX::PHI, GFX::PHI, 0,
-                                    0,        "PHI",    makeFlagSet({InstFlag::IF_HasSideEffect})};
+    static const HwInstDesc phiMCID{
+        GFX::PHI, GFX::PHI, 0, 0, 0, "PHI", makeFlagSet({InstFlag::IF_HasSideEffect})};
 
     const size_t numPreds = bb->getPredecessors().size();
 
@@ -122,13 +122,14 @@ uint16_t getMnemonicToIsaOpcode(const std::string& mnemonic, GfxArchID arch) {
     auto get = [&](const std::unordered_map<std::string, uint16_t>& map,
                    const std::string& mnemonic) -> uint16_t {
         auto it = map.find(mnemonic);
-#ifndef NDEBUG
         if (it == map.end()) {
+            // Keep this check in release builds too: returning it->second on a
+            // past-the-end iterator is UB and previously caused a segfault when
+            // an unmapped mnemonic reached the emitter.
             std::cerr << "Error: No ISA opcode found for mnemonic " << mnemonic << " in arch "
                       << getArchName(arch) << "\n";
             return GFX::INVALID;
         }
-#endif
         return it->second;
     };
 
@@ -162,7 +163,7 @@ uint32_t getBytesPerGlobalLoad(const StinkyInstruction& inst) {
             return 16;
 
         default:
-            assert("Calling getBytesPerGlobalLoad but input is not GlobalRead");
+            assert(false && "Calling getBytesPerGlobalLoad but input is not GlobalRead");
             return 0;
     }
 }

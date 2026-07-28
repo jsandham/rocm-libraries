@@ -7,22 +7,38 @@ primbench is a single-header HIP and CUDA benchmarking library.
 ## Features
 
 - Simple benchmarking API
+- Built-in correctness assertions
 - Colored progress output
 - GPU warming and cooling
 - GPU cache clearing
 - Batching and stream blocking
 - Detailed JSON output
+- Linux and Windows support
 
 ## Dependencies
 
-primbench has the following dependencies:
+### Required
+
 - HIP or CUDA
-- [AMD SMI](https://rocm.docs.amd.com/projects/amdsmi/en/latest/) or [NVML](https://developer.nvidia.com/management-library-nvml) (for querying live GPU statistics)
 - C++17 or later
+
+### Optional (recommended)
+
+For GPU temperature monitoring:
+- [AMD SMI](https://rocm.docs.amd.com/projects/amdsmi/en/latest/) (HIP only, not available on Windows; typically included with ROCm)
+- [NVML](https://developer.nvidia.com/management-library-nvml) (CUDA only; ships with NVIDIA drivers)
+
+These libraries allow primbench to keep the GPU within a stable temperature range, reducing benchmark noise and improving reproducibility.
+
+> [!IMPORTANT]
+> If AMD SMI (HIP) or NVML (CUDA) is not available, for example on Windows, or if you choose not to link against these libraries, you **must** disable GPU monitoring by compiling with:
+> ```
+> -DPRIMBENCH_NO_MONITORING
+> ```
 
 ## Example
 
-[`examples/copy_benchmark.cpp`](./examples/copy_benchmark.cpp) shows how to use primbench:
+The HIP benchmark [`examples/copy_benchmark.cpp`](./examples/copy_benchmark.cpp) demonstrates how primbench is used:
 
 ```cpp
 #include "primbench.hpp"
@@ -75,9 +91,6 @@ struct copy_benchmark : public primbench::benchmark_interface
         for(size_t i = 0; i < items; ++i)
             h_input[i] = T(i);
 
-        primbench::log("Allocating output vector");
-        std::vector<T> h_output(items);
-
         primbench::log("Allocating device memory");
         T* d_input;
         T* d_output;
@@ -94,10 +107,26 @@ struct copy_benchmark : public primbench::benchmark_interface
         dim3 grid(items / items_per_block);
         dim3 block(BlockSize);
 
-        // primbench uses this to calculates the items/sec and bytes/sec
+        // primbench uses this to calculate the items/sec and bytes/sec
         state.set_items(items);
         state.add_reads<T>(items);
         state.add_writes<T>(items);
+
+        // Optional output validation (called once during warmup)
+        // Disable by defining PRIMBENCH_NO_TEST
+        state.test(
+            [&]
+            {
+                // Copy part of the output to host for quick validation
+                std::vector<T> h_output(3);
+                PRIMBENCH_CHECK(
+                    hipMemcpy(h_output.data(), d_output, 3 * sizeof(T), hipMemcpyDeviceToHost));
+
+                // Use placeholders (e.g., {0, 0, 0}) if expected
+                // values are unknown; assertion failures will print
+                // the actual values for you to copy-paste
+                PRIMBENCH_ASSERT(h_output, {0, 1, 2});
+            });
 
         // This passes a lambda to primbench, which calls it many times
         // primbench completely handles synchronization
@@ -123,13 +152,18 @@ int main(int argc, char* argv[])
 }
 ```
 
-The HIP benchmark is compiled and run like so:
+It is compiled and run like so on Linux:
 
 ```bash
 hipcc -o copy_benchmark examples/hip/copy_benchmark.cpp -I. -lamd_smi && ./copy_benchmark
 ```
 
-And its equivalent CUDA benchmark is compiled and run like so:
+And like so in PowerShell on Windows:
+```bash
+hipcc -o copy_benchmark.exe examples/hip/copy_benchmark.cpp -I. -DPRIMBENCH_NO_MONITORING -std=c++17 -g --offload-arch=$(amdgpu-arch) ; ./copy_benchmark.exe
+```
+
+Its equivalent CUDA benchmark is compiled and run like so on Linux:
 
 ```bash
 nvcc -o copy_benchmark examples/cuda/copy_benchmark.cu -I. -lnvidia-ml && ./copy_benchmark
@@ -139,7 +173,7 @@ It outputs this `results.json`:
 ```json
 {
     "context": {
-        "results_version": "3.0.0",
+        "results_version": "4.0.0",
         "general": {
             "algorithm": "copy",
             "specialization_count": 2,
@@ -157,11 +191,11 @@ It outputs this `results.json`:
                 "compiler": {
                     "name": "clang",
                     "version": "19.0.0git (https://github.com/RadeonOpenCompute/llvm-project roc-6.4.0 25133 c7fe45cf4b819c5991fe208aaa96edf142730f1d)"
-                },
-                "monitoring": {
-                    "name": "amdsmi",
-                    "version": "25.3.0"
                 }
+            },
+            "monitoring": {
+                "name": "amdsmi",
+                "version": "25.3.0"
             },
             "temperature_type": "edge",
             "host_name": "host",
@@ -353,12 +387,11 @@ Benchmarks that have been noisy for more than 10 seconds are automatically timed
 
 To reduce noise and ensure consistent timings, primbench ensures the GPU is within a stable temperature range. Cold GPUs boost and inflate performance; hot GPUs throttle and add variance.
 
-Before benchmarking a specialization, primbench:
+Before benchmarking a batch, primbench:
 
 * Warms the GPU to ≥ 50 °C (`--min-gpu-temp`).
 * Cools it if it exceeds 60 °C (`--max-gpu-temp`).
 
-primbench currently does not cool down the GPU *while* benchmarking a specialization, but this may be changed in the future.
 
 Temperatures are read using AMD SMI/NVML. Warming uses short GPU workloads; cooling waits until the GPU naturally drops back into range. If either process takes more than 60 seconds, primbench aborts (`--max-warming-secs`, `--max-cooling-secs`).
 

@@ -1,6 +1,6 @@
 ################################################################################
 #
-# Copyright (C) 2022-2025 Advanced Micro Devices, Inc. All rights reserved.
+# Copyright (C) 2022-2026 Advanced Micro Devices, Inc. All rights reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -52,6 +52,7 @@ class UserArgumentsInfo:
     scaleAlphaVecSize: int = 0
     biasSize: int = 0
     eSize: int = 0
+    gateSize: int = 0
     activationSize: int = 0
     factorDimSize: int = 0
     # Total argument size
@@ -108,7 +109,13 @@ class SignatureDefault(Signature):
 
         group_segment_size = kernel["LdsNumBytes"]
 
+        # When modify the size, please also update TENSILE_COMMON_KERNEL_ARGS_SIZE in ContractionSolution.hpp
+        userArgumentsInfo.commonArgsNum += 4
+        userArgumentsInfo.commonArgsSize = userArgumentsInfo.commonArgsNum * writer.states.bpr
+
         sgprWgZ = 1 if kernel["ProblemType"]["NumIndicesC"] > 2 else 0
+        numSgprToLoad = writer.states.numSgprToLoad + userArgumentsInfo.commonArgsNum
+        writer.states.numSgprPreload = min(numSgprToLoad, writer.states.numSgprPreload)
         signature = SignatureBase(kernelName=writer.states.kernelName,
                                     kernArgsVersion=kernel["InternalSupportParams"]["KernArgsVersion"],
                                     codeObjectVersion=kernel["CodeObjectVersion"],
@@ -116,16 +123,13 @@ class SignatureDefault(Signature):
                                     sgprWorkGroup=(1, 1, sgprWgZ),
                                     vgprWorkItem=0,
                                     flatWorkGroupSize=(kernel["NumThreads"]),
-                                    preloadKernArgs=bool(kernel["PreloadKernArgs"]))
+                                    numSgprPreload=writer.states.numSgprPreload)
 
        # General Argument info
         signature.addArg(   "Gemm info", SVK.SIG_VALUE, "u32")
         signature.addArg("kernel info0", SVK.SIG_VALUE, "u32")
         signature.addArg("kernel info1", SVK.SIG_VALUE, "u32")
         signature.addArg("numWG",        SVK.SIG_VALUE, "u32")
-        # When modify the size, please also update TENSILE_COMMON_KERNEL_ARGS_SIZE in ContractionSolution.hpp
-        userArgumentsInfo.commonArgsNum += 4
-        userArgumentsInfo.commonArgsSize = userArgumentsInfo.commonArgsNum * writer.states.bpr
 
         srcValueTypeA = getSrcValueType(kernel, True)
         srcValueTypeB = getSrcValueType(kernel, False)
@@ -207,17 +211,48 @@ class SignatureDefault(Signature):
         userArgumentsInfo.gemmArgumentSize += userArgumentsInfo.alphaMaxSize
         userArgumentsInfo.gemmArgumentSize += userArgumentsInfo.betaMaxSize
 
-        if kernel["StreamK"]:
+        if kernel["ExpertSchedulingMode"] > 0 and kernel["ESMRuntimeGate"]:
+            signature.addArg( "ESMRuntimeSupported", SVK.SIG_VALUE,               "u32")
+            userArgumentsInfo.gemmArgumentSize += 4
+
+        if kernel["StreamK"] == 4:
+            signature.addArg("ItersPerTile",                       SVK.SIG_VALUE, "u32")
+            signature.addArg("TotalItems",                         SVK.SIG_VALUE, "u32")
+            signature.addArg("SKTiles",                            SVK.SIG_VALUE, "u32")
+            signature.addArg("SKSplit",                            SVK.SIG_VALUE, "u32")
+            signature.addArg("SKItersPerWI",                       SVK.SIG_VALUE, "u32")
+            signature.addArg("SKGrid",                             SVK.SIG_VALUE, "u32")
+            userArgumentsInfo.gemmArgumentSize += 24
+        elif kernel["StreamK"] == 5:
+            # Hybrid SK3+SK4. The host pushes only the 6 args matching the
+            # mode it selected for this launch; the SK4 reader names
+            # (TotalItems, SKTiles, SKSplit, SKItersPerWI, SKGrid) are emitted
+            # as RegSet aliases (see the SK5 block in KernelWriterAssembly.py)
+            # onto the same physical SGPRs as the SK3 primary names
+            # (MagicNumberItersPerTile, MagicShiftItersPerTile, SKItersPerWG,
+            # skGrid, skTiles) respectively.
+            #
+            # The mode bit (bit 30 of slot 2) selects the active path. The
+            # signature metadata uses SK3 names as the primary kernarg labels
+            # because they are what defineSgpr() declares; SK4 names exist
+            # only as register aliases.
+            signature.addArg("ItersPerTile",                       SVK.SIG_VALUE, "u32")
+            signature.addArg("MagicNumberItersPerTile",            SVK.SIG_VALUE, "u32")
+            signature.addArg("MagicShiftItersPerTile",             SVK.SIG_VALUE, "u32")
+            signature.addArg("SKItersPerWG",                       SVK.SIG_VALUE, "u32")
+            signature.addArg("skGrid",                             SVK.SIG_VALUE, "u32")
+            signature.addArg("skTiles",                            SVK.SIG_VALUE, "u32")
+            userArgumentsInfo.gemmArgumentSize += 24
+        elif kernel["StreamK"] == 3:  # SK3 two-tile ABI
             # StreamK args
             signature.addArg("ItersPerTile",                       SVK.SIG_VALUE, "u32")
             signature.addArg("MagicNumberItersPerTile",            SVK.SIG_VALUE, "u32")
             signature.addArg("MagicShiftItersPerTile",             SVK.SIG_VALUE, "u32")
             signature.addArg("SKItersPerWG",                       SVK.SIG_VALUE, "u32")
             userArgumentsInfo.gemmArgumentSize += 16
-            if kernel["StreamK"] >= 2: # Two-tile SK
-                signature.addArg("skGrid",                         SVK.SIG_VALUE, "u32")
-                signature.addArg("skTiles",                        SVK.SIG_VALUE, "u32")
-                userArgumentsInfo.gemmArgumentSize += 8
+            signature.addArg("skGrid",                             SVK.SIG_VALUE, "u32")
+            signature.addArg("skTiles",                            SVK.SIG_VALUE, "u32")
+            userArgumentsInfo.gemmArgumentSize += 8
 
         if kernel["ProblemType"]["UseScaleAB"]:
             signature.addArg("AddressScaleA", SVK.SIG_GLOBALBUFFER, cptValueType, "generic")
@@ -265,6 +300,14 @@ class SignatureDefault(Signature):
             if kernel["ProblemType"]["ActivationType"] in ['all', 'hipblaslt_all'] :
                 signature.addArg(       "activationType", SVK.SIG_VALUE,               "u32")
 
+        if writer.states.useGateResidual:
+            signature.addArg("gate",     SVK.SIG_GLOBALBUFFER, srcValueTypeB, "generic")
+            signature.addArg("gateType", SVK.SIG_VALUE,        "u32")
+            for i in range(0, writer.states.gate.numSgprStrides):
+                signature.addArg("strideG%u"%i, SVK.SIG_VALUE, "u32")
+        # Gate is not part of the grouped-gemm UserArgs struct (totalSize); it is
+        # delivered via the normal kernarg above, so gate adds nothing to totalSize.
+
         # TODO- combine one workspace
         if (kernel["ProblemType"]["OutputAmaxD"]):
             signature.addArg(    "AddrAmaxOut", SVK.SIG_GLOBALBUFFER, cptValueType, "generic")
@@ -291,7 +334,8 @@ class SignatureDefault(Signature):
                                       userArgumentsInfo.biasSize + \
                                       userArgumentsInfo.factorDimSize + \
                                       userArgumentsInfo.eSize + \
-                                      userArgumentsInfo.activationSize
+                                      userArgumentsInfo.activationSize + \
+                                      userArgumentsInfo.gateSize
 
         writer.states.userArgsInfo = userArgumentsInfo
 

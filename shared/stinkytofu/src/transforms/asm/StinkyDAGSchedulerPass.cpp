@@ -22,11 +22,19 @@
  * ************************************************************************ */
 #include "stinkytofu/transforms/asm/StinkyDAGSchedulerPass.hpp"
 
+#include <climits>
+
+#include "stinkytofu/analysis/AnalysisRegistration.hpp"
+#include "stinkytofu/analysis/BBIndexAnalysis.hpp"
+#include "stinkytofu/analysis/LoopAnalysis.hpp"
+#include "stinkytofu/analysis/controlflow/DominanceAnalysis.hpp"
 #include "stinkytofu/core/BasicBlock.hpp"
 #include "stinkytofu/core/PassManager.hpp"
+#include "stinkytofu/hardware/ArchHelper.hpp"
 #include "stinkytofu/support/CFGTraversal.hpp"
 #include "stinkytofu/support/LoopDetection.hpp"
 #include "stinkytofu/transforms/asm/BuildDefUseChain.hpp"
+#include "stinkytofu/transforms/asm/ExecMaskGrouping.hpp"
 
 // Before dag/CDNA*.hpp so PASS_DEBUG inside those headers uses this pass name.
 #define DEBUG_TYPE "StinkyDAGSchedulerPass"
@@ -36,11 +44,23 @@
 namespace {
 using namespace stinkytofu;
 
-// Check if instruction is a movable side effect (like s_barrier)
-static bool isMovableSideEffect(const StinkyInstruction& inst) {
-    // This is a barrier and has manually defined dependencies.
-    return isBarrier(inst) && !inst.getDestRegs().empty();
+static void dumpDAGGraph(const std::vector<std::unordered_set<unsigned>>& dagGraph,
+                         const DAGNodeList& dagNodes) {
+    std::cerr << "*** DAG Graph Dump: ***\n";
+    for (unsigned i = 0; i < dagGraph.size(); ++i) {
+        std::cerr << "Node " << i << ": ";
+        dagNodes[i].inst->dump(std::cerr);
+        std::cerr << "  successors: ";
+        for (unsigned succId : dagGraph[i]) {
+            std::cerr << succId << " ";
+        }
+        std::cerr << "\n";
+    }
+    std::cerr << "\n\n";
 }
+
+// collapseExecMaskedRegions()/expandExecMaskedGroups(): see ExecMaskGrouping.hpp and
+// docs/developer/exec-mask-grouping.md.
 
 // --- Region scheduler (does NOT move fences) ---
 //
@@ -49,7 +69,7 @@ static bool isMovableSideEffect(const StinkyInstruction& inst) {
 // (only when both endpoints are inside the region).
 static void scheduleRegionWithMovableSideEffects(
     IRList::iterator regionStart, IRList::iterator regionEnd, IRList::iterator blockBegin,
-    std::vector<StinkyInstruction*>& scheduled, ReadyQueue& readyQueue,
+    std::vector<IRBase*>& scheduled, ReadyQueue& readyQueue,
     const std::unordered_map<StinkyInstruction*, unsigned>& wmmaIndex) {
     if (regionStart == regionEnd) {
         return;  // Empty region, nothing to schedule.
@@ -78,6 +98,12 @@ static void scheduleRegionWithMovableSideEffects(
     for (IRList::iterator it = regionStart; it != regionEnd; ++it) {
         dagNodes.emplace_back(&getStinkyInst(it), id++);
     }
+
+    // Reverse lookup for the hazard pre-scan below (find a consumer instruction's id
+    // in O(1) instead of rescanning dagNodes per BFS hit).
+    std::unordered_map<StinkyInstruction*, unsigned> instToId;
+    instToId.reserve(regionSize);
+    for (unsigned i = 0; i < regionSize; ++i) instToId[dagNodes[i].inst] = i;
 
     // Graph
     std::vector<std::unordered_set<unsigned>> dagGraph(regionSize);
@@ -241,7 +267,7 @@ static void scheduleRegionWithMovableSideEffects(
             std::vector<DsInfo*> group;
             auto flushGroup = [&]() {
                 if (group.empty()) return;
-                bool asc = groupAsc.count(prevAff) ? groupAsc[prevAff] : true;
+                bool asc = groupAsc.contains(prevAff) ? groupAsc[prevAff] : true;
                 if (!asc) {
                     // Reverse operand type order but keep DAG id order within
                     // each type. Sort by (srcReg descending, idx ascending).
@@ -261,6 +287,113 @@ static void scheduleRegionWithMovableSideEffects(
             }
             flushGroup();
         }
+    }
+
+    // Prefix sum over the region in original program order: cumCycles[k] = the
+    // estimated absolute cycle at which dagNodes[k] would start, if the unmodified
+    // program order were followed exactly (WMMA -> latencyCycles, its full co-issue
+    // window; otherwise issueCycles). Used below to turn "producer must precede its
+    // consumer by N cycles" into a plain deadline number instead of a node to hop
+    // before — see DAGNode::hazardDeadline.
+    std::vector<int> cumCycles(regionSize + 1, 0);
+    for (unsigned k = 0; k < regionSize; ++k) {
+        StinkyInstruction* inst = dagNodes[k].inst;
+        cumCycles[k + 1] =
+            cumCycles[k] + (isMatrixInstruction(*inst) ? inst->latencyCycles : inst->issueCycles);
+    }
+
+    // Pre-scan: flag producers feeding a hazarded consumer, per kCdna5HazardRules (a
+    // data-driven table of fixed producer->consumer cycle gaps keyed by register
+    // file — e.g. SALU sgpr -> SMEM/tensor_load/VMEM address, VALU vgpr -> VMEM
+    // address). Detection per rule: BFS the node's users (skipping PHIs); if a
+    // rule.isConsumer user reads a register of rule.regType this node writes, flag it
+    // (dagNodes[i].hazardFlags). This half drives the consumer-side gate
+    // (CDNA5ReadyQueue::hazardGates_), which blocks the consumer for as long as real
+    // intervening instructions are available to pay the wait -- but see
+    // DAGNode::hazardDeadline's comment (ReadyQueue.hpp) for the case where they run
+    // out and the scheduler's pre-existing "pay the wait via advanceTime, then issue
+    // anyway" fallback applies instead.
+    //
+    // Also computes each flagged producer's hazardDeadline: a throughput heuristic
+    // that, when accurate, is what keeps the gate above from ever needing that
+    // fallback. Let X = cumCycles[consumerId], the hazarded consumer's estimated
+    // absolute cycle (per rule; a producer feeding several consumers, or matching
+    // several rules, takes the earliest/tightest deadline over all of them). The
+    // deadline is X - rule.cycles - producerCost: the gate is stamped only after this
+    // producer's own advanceTime has already run (see popNonWmma), so the deadline
+    // must reserve that cost too -- using X - rule.cycles alone would let the
+    // producer start one cost-unit later than it needs to.
+    // CDNA5ReadyQueue::decidePromote() forces the producer once its *live* clock_
+    // reaches this deadline, not once some proxy node happens to become structurally
+    // ready -- clock_ only advances via cycles actually issued, so an unrelated node
+    // becoming ready early can't trigger an early force the way a node-based trigger
+    // could. Still approximate (X is computed from original program order, which real
+    // scheduling may depart from), so it is not a substitute for the gate -- an
+    // inaccurate deadline can leave the gate short of real cycles, same as the
+    // producer-cost bug this fixed.
+    for (unsigned i = 0; i < regionSize; ++i) {
+        StinkyInstruction* prod = dagNodes[i].inst;
+        int bestDeadline = INT_MAX;
+
+        for (int ruleIdx = 0; ruleIdx < kNumCdna5HazardRules; ++ruleIdx) {
+            const HazardRule& rule = kCdna5HazardRules[ruleIdx];
+            if (!rule.isProducer(*prod)) continue;
+
+            std::unordered_map<uint32_t, int> defKey;
+            for (const StinkyRegister& d : prod->getDestRegs()) {
+                if (!d.isRegister() || isPseudoReg(d) || d.reg.type != rule.regType) continue;
+                for (uint32_t off = 0; off < d.reg.num; ++off)
+                    defKey[d.reg.idx + off] = regDepKey(d.reg.type, d.reg.idx + off);
+            }
+            if (defKey.empty()) continue;
+
+            std::unordered_set<int> hazardKeys;
+            unsigned ruleConsumerId = UINT_MAX;
+            std::vector<StinkyInstruction*> q(prod->getUsers().begin(), prod->getUsers().end());
+            std::unordered_set<StinkyInstruction*> seen;
+            while (!q.empty()) {
+                StinkyInstruction* u = q.back();
+                q.pop_back();
+                if (!seen.insert(u).second) continue;
+                if (u->getUnifiedOpcode() == GFX::PHI) {
+                    for (auto* pu : u->getUsers()) q.push_back(pu);
+                    continue;
+                }
+                if (!rule.isConsumer(*u)) continue;
+                bool matchedHere = false;
+                for (const StinkyRegister& s : u->getSrcRegs()) {
+                    if (!s.isRegister() || isPseudoReg(s) || s.reg.type != rule.regType) continue;
+                    for (uint32_t off = 0; off < s.reg.num; ++off) {
+                        auto it = defKey.find(s.reg.idx + off);
+                        if (it != defKey.end()) {
+                            hazardKeys.insert(it->second);
+                            matchedHere = true;
+                        }
+                    }
+                }
+                if (matchedHere) {
+                    auto idIt = instToId.find(u);
+                    if (idIt != instToId.end())
+                        ruleConsumerId = std::min(ruleConsumerId, idIt->second);
+                }
+            }
+            if (hazardKeys.empty()) continue;
+            for (int key : hazardKeys) dagNodes[i].hazardFlags.push_back({ruleIdx, key});
+            if (ruleConsumerId != UINT_MAX) {
+                // The gap is measured from this producer's own FINISH, not its start
+                // (matches the gate: hazardGates_ is stamped to rule.cycles only after
+                // updateWMMAStatus has already advanced clock_ by the producer's own
+                // cost). So the deadline for issuing it must also subtract that cost --
+                // otherwise "clock_ >= deadline" would let it start exactly one cycle
+                // too late relative to X.
+                const int producerCost =
+                    isMatrixInstruction(*prod) ? prod->latencyCycles : prod->issueCycles;
+                bestDeadline =
+                    std::min(bestDeadline, cumCycles[ruleConsumerId] - rule.cycles - producerCost);
+            }
+        }
+
+        if (!dagNodes[i].hazardFlags.empty()) dagNodes[i].hazardDeadline = bestDeadline;
     }
 
     PASS_DEBUG(dumpDAGGraph(dagGraph, dagNodes));
@@ -308,20 +441,6 @@ static void scheduleRegionWithMovableSideEffects(
     }
 }
 
-static bool hasSideEffect(const StinkyInstruction& inst) {
-    if (
-        // TODO: provide a configurable way to ignore certain instructions,
-        //       e.g. LocalWriteInstruction
-        //
-        // dynamic_cast<const LocalWriteInstruction*>(op) ||
-        //
-        isGlobalMemStore(inst) || isBranch(inst) || isBarrier(inst) || isWaitCnt(inst) ||
-        isHasSideEffect(inst)) {
-        return true;
-    }
-    return false;
-}
-
 // Schedule the instructions in the given IRList.
 // This will split the instructions into regions based on side-effect instructions
 // and schedule each region in a DAG.
@@ -334,7 +453,7 @@ static void scheduleInDAG(BasicBlock& bb, ReadyQueue& readyQueue,
 
     if (bb.empty()) return;
 
-    std::vector<StinkyInstruction*> scheduled;
+    std::vector<IRBase*> scheduled;
     scheduled.reserve(bb.size());
 
     BasicBlock::iterator beginIt = bb.begin();
@@ -345,9 +464,21 @@ static void scheduleInDAG(BasicBlock& bb, ReadyQueue& readyQueue,
     BasicBlock::iterator regionStart = beginIt;
 
     for (BasicBlock::iterator it = beginIt; it != endIt; ++it) {
-        StinkyInstruction& inst = getStinkyInst(it);
-        // Only break regions on non-movable side effects
-        if (hasSideEffect(inst) && !isMovableSideEffect(inst)) {
+        IRBase* irNode = it.getNodePtr();
+        auto* instPtr = dyn_cast<StinkyInstruction>(irNode);
+
+        if (!instPtr) {
+            // Non-instruction IR (e.g. AsmDirective): treat as non-movable
+            // side-effect boundary so its position is strictly preserved.
+            scheduleRegionWithMovableSideEffects(regionStart, it, beginIt, scheduled, readyQueue,
+                                                 wmmaIndex);
+            scheduled.push_back(irNode);
+            regionStart = std::next(it);
+            continue;
+        }
+
+        StinkyInstruction& inst = *instPtr;
+        if (hasSideEffect(inst)) {
             scheduleRegionWithMovableSideEffects(regionStart, it, beginIt, scheduled, readyQueue,
                                                  wmmaIndex);
 
@@ -369,9 +500,9 @@ static void scheduleInDAG(BasicBlock& bb, ReadyQueue& readyQueue,
 
     // Now we have a scheduled list of instructions.
     // Reorder the block to reflect the scheduling (move each to end in order).
-    for (StinkyInstruction* inst : scheduled) {
-        bb.removeIR(inst);
-        bb.appendIR(inst);
+    for (IRBase* ir : scheduled) {
+        bb.removeIR(ir);
+        bb.appendIR(ir);
     }
 
     readyQueue.onFinishBB();
@@ -399,25 +530,29 @@ class StinkyDAGSchedulerPass : public StinkyInstPass {
         return &StinkyDAGSchedulerPass::ID;
     }
 
-    void run(Function& func, PassContext& passCtx) override {
+    PreservedAnalyses run(Function& func, PassContext& passCtx, AnalysisManager& AM) override {
         // Build def-use chains so we can look up cross-BB WMMA consumers
         // of ds_reads for wmmaAffinity annotation.
-        buildUseDefChain(func, true);
+        const auto& domInfo = AM.getResult<DominanceAnalysis>(func);
+        buildUseDefChain(func, domInfo, true);
+
+        const auto& rpo = AM.getResult<BBIndexAnalysis>(func).rpo;
 
         // Pre-assign a function-wide index to each WMMA/SWMMA so wmmaAffinity
         // values are comparable across scheduling regions.
         std::unordered_map<StinkyInstruction*, unsigned> wmmaIndex;
         {
             unsigned idx = 0;
-            traverseCFGInRPO(func, [&](BasicBlock* bb) {
+            for (auto* bb : rpo) {
                 for (auto it = bb->begin(); it != bb->end(); ++it) {
-                    StinkyInstruction& inst = getStinkyInst(it);
-                    if (isWMMA(inst) || isSWMMA(inst)) wmmaIndex[&inst] = idx++;
+                    auto* inst = dyn_cast<StinkyInstruction>(it.getNodePtr());
+                    if (!inst) continue;
+                    if (isMatrixInstruction(*inst)) wmmaIndex[inst] = idx++;
                 }
-            });
+            }
         }
 
-        auto loops = detectLoops(func);
+        const auto& loops = AM.getResult<LoopAnalysis>(func);
 
         PASS_DEBUG(for (const Loop& loop
                         : loops) {
@@ -445,8 +580,20 @@ class StinkyDAGSchedulerPass : public StinkyInstPass {
             for (BasicBlock* bb : loop.bodyBBs) bbToLoop[bb] = &loop;
         }
 
-        traverseCFGInRPO(func, [&](BasicBlock* bb) {
-            if (!passCtx.shouldProcessBasicBlock(*bb)) return;
+        const GfxArchID archId =
+            getGfxArchID(passCtx.getGemmTileConfig().arch[0], passCtx.getGemmTileConfig().arch[1],
+                         passCtx.getGemmTileConfig().arch[2]);
+        const uint32_t wavefrontSize = passCtx.getWavefrontSize();
+
+        auto scheduleBlock = [&](BasicBlock* bb, ReadyQueue& rq) {
+            AsmIRBuilder builder(*bb, archId);
+            collapseExecMaskedRegions(*bb, builder, wavefrontSize);
+            scheduleInDAG(*bb, rq, wmmaIndex);
+            expandExecMaskedGroups(*bb);
+        };
+
+        for (auto* bb : rpo) {
+            if (!passCtx.shouldProcessBasicBlock(*bb)) continue;
 
             auto it = bbToLoop.find(bb);
             if (it != bbToLoop.end()) {
@@ -457,13 +604,14 @@ class StinkyDAGSchedulerPass : public StinkyInstPass {
                     rq->setLoopContext(loop);
                 }
                 rq->setAnalysisCache(&analysisCache);
-                scheduleInDAG(*bb, *rq, wmmaIndex);
+                scheduleBlock(bb, *rq);
             } else {
                 auto rq = chooseReadyQueue(passCtx);
                 rq->setAnalysisCache(&analysisCache);
-                scheduleInDAG(*bb, *rq, wmmaIndex);
+                scheduleBlock(bb, *rq);
             }
-        });
+        }
+        return preserveCFGAnalyses();
     }
 };
 
