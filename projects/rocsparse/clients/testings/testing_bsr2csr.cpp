@@ -79,8 +79,6 @@ void testing_bsr2csr_bad_arg(const Arguments& arg)
 template <typename T>
 static rocsparse_status check_bsr_generation(const Arguments& arg)
 {
-    std::cout << "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
-
     rocsparse_seedrand();
     rocsparse_matrix_factory<T> matrix_factory(arg);
 
@@ -415,8 +413,6 @@ static rocsparse_status check_bsr_generation(const Arguments& arg)
             return rocsparse_status_internal_error;
         }
     }
-
-    std::cout << "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB" << std::endl;
 
     return rocsparse_status_success;
 

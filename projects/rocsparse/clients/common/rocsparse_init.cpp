@@ -872,7 +872,6 @@ void rocsparse_init_gebsr_mtx(const char*          filename,
 {
     ROCSPARSE_CLIENTS_ROUTINE_TRACE;
 
-    // this->init_csr(bsr_row_ptr, bsr_col_ind, bsr_val, Mb, Nb, nnzb, base);
     rocsparse_init_csr_mtx(filename, bsr_row_ptr, bsr_col_ind, bsr_val, Mb, Nb, nnzb, base);
 
     const size_t nvalues = size_t(nnzb) * row_block_dim * col_block_dim;
@@ -1202,8 +1201,7 @@ void rocsparse_init_gebsr_rocalution(const char*          filename,
             break;
         }
 
-        // Derive the GEBSR block-grid dimensions from the CSR dimensions, the
-        // same way rocsparse_matrix_utils::convert would have.
+        // Derive the GEBSR block-grid dimensions from the CSR dimensions
         Mb = (M + row_block_dim - 1) / row_block_dim;
         Nb = (N + col_block_dim - 1) / col_block_dim;
 
@@ -1524,16 +1522,12 @@ void rocsparse_init_gebsr_random(std::vector<I>&            row_ptr,
 
         if(mb_i <= 0 || nb_i <= 0 || rbd <= 0 || cbd <= 0)
         {
-            row_ptr.clear();
+            row_ptr.assign((mb_i > 0) ? (size_t(mb_i) + 1) : 0, static_cast<I>(base));
             col_ind.clear();
             val.clear();
             nnzb = 0;
             break;
         }
-
-        std::cout << "convert M: " << M << " N: " << N << " base: " << base
-                  << " init_kind: " << init_kind << " full_rank: " << full_rank
-                  << " to_int: " << to_int << std::endl;
 
         // Generate a random CSR matrix on the host using the caller's
         // (I, J, T) index / value types directly.
@@ -1543,8 +1537,6 @@ void rocsparse_init_gebsr_random(std::vector<I>&            row_ptr,
         I              nnz_csr = 0;
         rocsparse_init_csr_random(
             csr_row_ptr, csr_col_ind, csr_val, M, N, nnz_csr, base, init_kind, full_rank, to_int);
-
-        std::cout << "convert M: " << M << " N: " << N << " nnz_csr: " << nnz_csr << std::endl;
 
         // Convert CSR -> GEBSR entirely on the host, templated on (T, I, J),
         // so we do not depend on rocsparse conversion kernels (which do not
