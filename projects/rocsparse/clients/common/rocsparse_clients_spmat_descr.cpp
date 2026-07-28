@@ -137,29 +137,8 @@ void rocsparse_clients::spmat_descr<T, I, J>::near_check_values(
     auto& device_values = this->get_device_values();
     if(this->m_batch_count == 1)
     {
-        std::cout << "symbolic[0]: " << symbolic[0] << " numeric[0]: " << numeric[0] << std::endl;
-
         if((symbolic[0] == -1) && (numeric[0] == -1))
         {
-            // std::cout << "host_values" << std::endl;
-            // for(size_t i = 0; i < host_values.size(); i++)
-            // {
-            //     std::cout << host_values[i] << " ";
-            // }
-            // std::cout << "" << std::endl;
-
-            // const size_t   n = device_values.size();
-            // std::vector<T> htemp(n);
-            // CHECK_HIP_ERROR(hipMemcpy(
-            //     htemp.data(), device_values.data(), sizeof(T) * n, hipMemcpyDeviceToHost));
-
-            // std::cout << "device_values" << std::endl;
-            // for(size_t i = 0; i < htemp.size(); i++)
-            // {
-            //     std::cout << htemp[i] << " ";
-            // }
-            // std::cout << "" << std::endl;
-
             host_values.near_check(device_values);
         }
     }

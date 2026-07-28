@@ -335,20 +335,6 @@ void rocsparse_matrix_factory_file<MATRIX_INIT, T, I, J>::init_gebsr(
     }
     case rocsparse_matrix_file_rocalution:
     {
-        // spec<T, I, J>::init_gebsr_rocalution(*this,
-        //                                      bsr_row_ptr,
-        //                                      bsr_col_ind,
-        //                                      bsr_val,
-        //                                      dirb,
-        //                                      Mb,
-        //                                      Nb,
-        //                                      nnzb,
-        //                                      row_block_dim,
-        //                                      col_block_dim,
-        //                                      base,
-        //                                      matrix_type,
-        //                                      uplo,
-        //                                      storage);
         rocsparse_init_gebsr_rocalution(this->m_filename.c_str(),
                                         bsr_row_ptr,
                                         bsr_col_ind,
