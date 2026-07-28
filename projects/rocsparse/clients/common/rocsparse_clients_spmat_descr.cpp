@@ -34,25 +34,29 @@ select_lambdas(Ts...) -> select_lambdas<Ts...>;
 template <typename T, typename I, typename J>
 const device_dense_vector<T>& rocsparse_clients::spmat_descr<T, I, J>::get_device_values() const
 {
-    return std::visit([](const auto& d) -> const auto& { return d.device().val; }, this->m_data);
+    return std::visit(
+        [](const auto& d) -> const auto& { return d.device().val; }, this->m_data);
 }
 
 template <typename T, typename I, typename J>
 const host_vector<T>& rocsparse_clients::spmat_descr<T, I, J>::get_host_values() const
 {
-    return std::visit([](const auto& d) -> const auto& { return d.host().val; }, this->m_data);
+    return std::visit(
+        [](const auto& d) -> const auto& { return d.host().val; }, this->m_data);
 }
 
 template <typename T, typename I, typename J>
 device_dense_vector<T>& rocsparse_clients::spmat_descr<T, I, J>::get_device_values()
 {
-    return std::visit([](auto& d) -> auto& { return d.device().val; }, this->m_data);
+    return std::visit(
+        [](auto& d) -> auto& { return d.device().val; }, this->m_data);
 }
 
 template <typename T, typename I, typename J>
 host_vector<T>& rocsparse_clients::spmat_descr<T, I, J>::get_host_values()
 {
-    return std::visit([](auto& d) -> auto& { return d.host().val; }, this->m_data);
+    return std::visit(
+        [](auto& d) -> auto& { return d.host().val; }, this->m_data);
 }
 
 template <typename T, typename I, typename J>
