@@ -211,7 +211,6 @@ struct testing_spmv_dispatch_traits<rocsparse_format_bsr, I, J, A, X, Y, T>
                                       rocsparse_index_base               base)
     {
         J block_dim = matrix_factory.m_arg.block_dim;
-
         matrix_factory.init_gebsr(hA, m, n, block_dim, block_dim, base);
         m *= block_dim;
         n *= block_dim;

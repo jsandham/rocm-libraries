@@ -27,8 +27,6 @@
 #include "rocsparse_enum.hpp"
 #include "testing.hpp"
 
-#include <iostream>
-
 namespace rocsparse_clients
 {
     class spic0_descr
@@ -970,10 +968,6 @@ void testing_spic0(const Arguments& arg)
 
     static constexpr const bool             full_rank = true;
     rocsparse_clients::spmat_descr<T, I, J> A(arg, batch_count, full_rank);
-
-    std::cout << "\n========== Matrix A (spmat_descr after construction) ==========\n";
-    const auto& h = A.template host<rocsparse_format_bsr>();
-    h.info();
 
     if(false == A.is_square())
     {

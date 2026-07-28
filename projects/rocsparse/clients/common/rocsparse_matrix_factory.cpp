@@ -653,8 +653,6 @@ void rocsparse_matrix_factory<T, I, J>::init_bsr(host_gebsr_matrix<T, I, J>&   t
 
     mb_ = that_.mb;
     nb_ = that_.nb;
-
-    //traits_init_bsr<T, I, J>::init(*this, that_, that_on_device_, mb_, nb_, base_);
 }
 
 //
