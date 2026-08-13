@@ -110,4 +110,162 @@ namespace rocsparse
             }
         }
     }
+
+    template <uint32_t BLOCKSIZE, uint32_t WFSIZE, uint32_t NNZ_PER_THREAD, typename I, typename T>
+    ROCSPARSE_DEVICE_ILF void gemvi_device_part1(I                    m,
+                                                 I                    n,
+                                                 const T*             A,
+                                                 int64_t              lda,
+                                                 I                    nnz,
+                                                 const T*             x_val,
+                                                 const I*             x_ind,
+                                                 T*                   workspace,
+                                                 rocsparse_index_base idx_base)
+    {
+        static_assert(WFSIZE > 0 && (WFSIZE & (WFSIZE - 1)) == 0, "WFSIZE must be a power of two.");
+        static_assert(BLOCKSIZE > 0, "BLOCKSIZE must be positive.");
+        static_assert(BLOCKSIZE % WFSIZE == 0, "BLOCKSIZE must be a multiple of WFSIZE.");
+
+        const int lid = hipThreadIdx_x & (WFSIZE - 1);
+        const int wid = hipThreadIdx_x / WFSIZE;
+
+        // Each threadblock processes WFSIZE rows, where
+        // each wavefront processes a column of these rows, e.g.
+        // WF 0 processes the first column entry from the list of non-zeros
+        // WF 1 processes the second column entry from the list of non-zeros
+        // etc.
+        const I row = hipBlockIdx_x * WFSIZE + lid;
+
+        // Sub-row sum accumulator
+        T sum = static_cast<T>(0);
+
+        if(row < m)
+        {
+            I idx    = NNZ_PER_THREAD * (BLOCKSIZE / WFSIZE) * hipBlockIdx_y;
+            I stride = NNZ_PER_THREAD * (BLOCKSIZE / WFSIZE) * hipGridDim_y;
+            while(stride < nnz)
+            {
+                for(I i = 0; i < NNZ_PER_THREAD; i++)
+                {
+                    sum = rocsparse::fma(
+                        x_val[idx + (BLOCKSIZE / WFSIZE) * i + wid],
+                        A[(x_ind[idx + (BLOCKSIZE / WFSIZE) * i + wid] - idx_base) * lda + row],
+                        sum);
+                }
+
+                idx += NNZ_PER_THREAD * (BLOCKSIZE / WFSIZE) * hipGridDim_y;
+                stride += NNZ_PER_THREAD * (BLOCKSIZE / WFSIZE) * hipGridDim_y;
+            }
+
+            stride -= NNZ_PER_THREAD * (BLOCKSIZE / WFSIZE) * hipGridDim_y;
+
+            I idx2 = (BLOCKSIZE / WFSIZE) * hipBlockIdx_y + wid;
+            for(I i = idx2 + stride; i < nnz; i += hipGridDim_y * (BLOCKSIZE / WFSIZE))
+            {
+                sum = rocsparse::fma(x_val[i], A[(x_ind[i] - idx_base) * lda + row], sum);
+            }
+        }
+
+        // Having the sub-row sums spread over multiple wavefronts (actually
+        // each wavefront contains 64 sub-row sums), we need to use LDS for
+        // the row sum reduction.
+        __shared__ T sdata[BLOCKSIZE];
+
+        // Write sub-row sum into LDS
+        sdata[wid * WFSIZE + lid] = sum;
+
+        // and wait for all threads to finish writing
+        __syncthreads();
+
+        // Accumulate the per-wavefront sub-row sums (one per wid) via a binary
+        // tree reduction in LDS. NWF is the number of wavefronts in the block
+        // and is a compile-time power of two, so the loop is fully unrolled and
+        // produces the exact same pairing/order as the previous hand-unrolled
+        // reduction (numerically identical), while now supporting any block
+        // size (not just the fixed 1024-thread block).
+        constexpr uint32_t NWF = BLOCKSIZE / WFSIZE;
+#pragma unroll
+        for(uint32_t s = NWF / 2; s > 0; s >>= 1)
+        {
+            if(wid < s)
+            {
+                sdata[wid * WFSIZE + lid] += sdata[(wid + s) * WFSIZE + lid];
+            }
+            __syncthreads();
+        }
+
+        if(wid == 0)
+        {
+            workspace[WFSIZE * hipGridDim_y * hipBlockIdx_x + WFSIZE * hipBlockIdx_y + lid]
+                = sdata[lid];
+        }
+    }
+
+    template <uint32_t BLOCKSIZE, uint32_t WFSIZE, typename I, typename T>
+    ROCSPARSE_DEVICE_ILF void
+        gemvi_device_part2(I m, I n, T alpha, T beta, const T* workspace, T* y)
+    {
+        static_assert(WFSIZE > 0 && (WFSIZE & (WFSIZE - 1)) == 0, "WFSIZE must be a power of two.");
+        static_assert(BLOCKSIZE > 0, "BLOCKSIZE must be positive.");
+        static_assert(BLOCKSIZE % WFSIZE == 0, "BLOCKSIZE must be a multiple of WFSIZE.");
+
+        const int lid = hipThreadIdx_x & (WFSIZE - 1);
+        const int wid = hipThreadIdx_x / WFSIZE;
+
+        const I row = hipBlockIdx_x * WFSIZE + lid;
+
+        // Number of split-k partial sums per output row produced by part1
+        // (equal to the y-dimension of the part1 launch grid).
+        constexpr uint32_t NBLOCKS_PART1 = 256;
+        constexpr uint32_t NWF           = BLOCKSIZE / WFSIZE;
+
+        static_assert(NBLOCKS_PART1 % NWF == 0,
+                      "part1 split-k count must be a multiple of the number of wavefronts.");
+
+        // part1 stores its partials as
+        //   workspace[WFSIZE * NBLOCKS_PART1 * blockIdx_x + WFSIZE * by + lid]
+        // for split-k block by in [0, NBLOCKS_PART1) and row lane lid in [0, WFSIZE).
+        // Each wavefront accumulates the partials whose split-k index by is
+        // congruent to wid modulo NWF, since
+        //   BLOCKSIZE * i + WFSIZE * wid + lid == WFSIZE * (NWF * i + wid) + lid,
+        // i.e. by == NWF * i + wid. This keeps WFSIZE running sums live per
+        // wavefront (one per output row lane) in registers instead of staging
+        // the whole region in LDS.
+        T sum = static_cast<T>(0);
+        for(uint32_t i = 0; i < NBLOCKS_PART1 / NWF; i++)
+        {
+            sum += workspace[WFSIZE * NBLOCKS_PART1 * hipBlockIdx_x + BLOCKSIZE * i + WFSIZE * wid
+                             + lid];
+        }
+
+        // Reduce the per-wavefront partial sums (one set per lid) through LDS,
+        // using the same binary-tree reduction as part1.
+        __shared__ T sdata[BLOCKSIZE];
+        sdata[wid * WFSIZE + lid] = sum;
+        __syncthreads();
+
+#pragma unroll
+        for(uint32_t s = NWF / 2; s > 0; s >>= 1)
+        {
+            if(wid < s)
+            {
+                sdata[wid * WFSIZE + lid] += sdata[(wid + s) * WFSIZE + lid];
+            }
+            __syncthreads();
+        }
+
+        // First wavefront applies alpha/beta and writes the accumulated row sums to y.
+        if(wid == 0 && row < m)
+        {
+            if(beta != static_cast<T>(0))
+            {
+                y[row] = rocsparse::fma(alpha, sdata[lid], beta * y[row]);
+            }
+            else
+            {
+                y[row] = alpha * sdata[lid];
+            }
+        }
+    }
+
 }
