@@ -57,7 +57,7 @@ namespace rocsparse
         }
     }
 
-    template <uint32_t BLOCKSIZE, uint32_t WFSIZE, uint32_t NNZ_PER_THREAD, typename I, typename T>
+    template <uint32_t BLOCKSIZE, uint32_t WFSIZE, uint32_t UNROLL, typename I, typename T>
     ROCSPARSE_KERNEL(BLOCKSIZE)
     void gemvi_kernel_part1(I m,
                             I n,
@@ -77,15 +77,16 @@ namespace rocsparse
 
         if(alpha != static_cast<T>(0) || beta != static_cast<T>(1))
         {
-            rocsparse::gemvi_device_part1<BLOCKSIZE, WFSIZE, NNZ_PER_THREAD>(
+            rocsparse::gemvi_device_part1<BLOCKSIZE, WFSIZE, UNROLL>(
                 m, n, A, lda, nnz, x_val, x_ind, workspace, idx_base);
         }
     }
 
     template <uint32_t BLOCKSIZE, uint32_t WFSIZE, typename I, typename T>
     ROCSPARSE_KERNEL(BLOCKSIZE)
-    void gemvi_kernel_part2(I m,
-                            I n,
+    void gemvi_kernel_part2(I   m,
+                            I   n,
+                            int grid_y,
                             ROCSPARSE_DEVICE_HOST_SCALAR_PARAMS(T, alpha),
                             ROCSPARSE_DEVICE_HOST_SCALAR_PARAMS(T, beta),
                             const T* __restrict__ workspace,
@@ -97,8 +98,43 @@ namespace rocsparse
 
         if(alpha != static_cast<T>(0) || beta != static_cast<T>(1))
         {
-            rocsparse::gemvi_device_part2<BLOCKSIZE, WFSIZE>(m, n, alpha, beta, workspace, y);
+            rocsparse::gemvi_device_part2<BLOCKSIZE, WFSIZE>(
+                m, n, grid_y, alpha, beta, workspace, y);
         }
+    }
+
+    constexpr uint32_t gemvi_part1_blocksize  = 256;
+    constexpr uint32_t gemvi_part1_wfsize     = 32;
+    constexpr uint32_t gemvi_part1_unroll     = 8;
+    constexpr int      gemvi_part1_max_grid_y = 256;
+    constexpr int      gemvi_part1_oversub    = 2;
+
+    inline int gemvi_part1_grid_x(rocsparse_int m)
+    {
+        return static_cast<int>((m - 1) / static_cast<rocsparse_int>(gemvi_part1_wfsize) + 1);
+    }
+
+    // Split-k y-grid. Grow only until part1 has enough row-blocks to fill the
+    // device (occupancy * OVERSUB), and never beyond one nnz per wavefront
+    // worker, which is the most split-k that still does useful A loads.
+    inline int gemvi_part1_grid_y(const hipDeviceProp_t& prop, rocsparse_int m, rocsparse_int nnz)
+    {
+        constexpr int nwf = static_cast<int>(gemvi_part1_blocksize / gemvi_part1_wfsize);
+
+        const int ny_work = rocsparse::min((nnz - 1) / nwf + 1, gemvi_part1_max_grid_y);
+
+        int per_cu = 1;
+        if(prop.maxThreadsPerMultiProcessor > 0)
+        {
+            per_cu = rocsparse::max(
+                prop.maxThreadsPerMultiProcessor / static_cast<int>(gemvi_part1_blocksize), 1);
+        }
+
+        const int sat    = gemvi_part1_oversub * prop.multiProcessorCount * per_cu;
+        const int grid_x = gemvi_part1_grid_x(m);
+        const int ny_occ = (grid_x >= sat) ? 1 : ((sat + grid_x - 1) / grid_x);
+
+        return rocsparse::max(1, rocsparse::min(ny_work, ny_occ));
     }
 
 #define LAUNCH_GEMVI_WAVE32(DIM_)                                     \
@@ -151,10 +187,18 @@ namespace rocsparse
 
         if(trans == rocsparse_operation_none)
         {
+            const int grid_x = rocsparse::gemvi_part1_grid_x(m);
+            const int grid_y = rocsparse::gemvi_part1_grid_y(handle->properties, m, nnz);
+
+            dim3 grid(grid_x, grid_y, 1);
+            dim3 blocks(gemvi_part1_blocksize, 1, 1);
+
             RETURN_IF_HIPLAUNCHKERNELGGL_ERROR(
-                (rocsparse::gemvi_kernel_part1<256, 32, 8>),
-                dim3((m - 1) / 32 + 1, 256, 1),
-                dim3(256, 1, 1),
+                (rocsparse::gemvi_kernel_part1<gemvi_part1_blocksize,
+                                               gemvi_part1_wfsize,
+                                               gemvi_part1_unroll>),
+                grid,
+                blocks,
                 0,
                 handle->stream,
                 m,
@@ -171,13 +215,14 @@ namespace rocsparse
                 handle->pointer_mode == rocsparse_pointer_mode_host);
 
             RETURN_IF_HIPLAUNCHKERNELGGL_ERROR(
-                (rocsparse::gemvi_kernel_part2<256, 32>),
-                dim3((m - 1) / 32 + 1),
-                dim3(256),
+                (rocsparse::gemvi_kernel_part2<gemvi_part1_blocksize, gemvi_part1_wfsize>),
+                dim3(grid_x),
+                dim3(gemvi_part1_blocksize),
                 0,
                 handle->stream,
                 m,
                 n,
+                grid_y,
                 ROCSPARSE_DEVICE_HOST_SCALAR_ARGS(handle, alpha_device_host),
                 ROCSPARSE_DEVICE_HOST_SCALAR_ARGS(handle, beta_device_host),
                 workspace,
@@ -188,89 +233,90 @@ namespace rocsparse
         {
             RETURN_IF_ROCSPARSE_ERROR(rocsparse_status_not_implemented);
         }
+        /*
+#define GEMVI_DIM 1024
+        if(trans == rocsparse_operation_none)
+        {
+            if(handle->wavefront_size == 32)
+            {
+                dim3 gemvi_blocks((m - 1) / 32 + 1);
 
-        // #define GEMVI_DIM 1024
-        //         if(trans == rocsparse_operation_none)
-        //         {
-        //             if(handle->wavefront_size == 32)
-        //             {
-        //                 dim3 gemvi_blocks((m - 1) / 32 + 1);
+                // RDNA4 (gfx1201, wave32) launch tuning.
+                //
+                // Each block processes WFSIZE(=32) output rows and spreads the
+                // sparse-vector dot product across BLOCKSIZE/32 wavefronts,
+                // reducing the partial sums through LDS. The baseline always
+                // used a 1024-thread block (32 wavefronts). gemvi is memory
+                // bound, so when there are already enough row-blocks to saturate
+                // the GPU, a 1024-thread block is oversized: it caps occupancy
+                // (fewer concurrent blocks per CU) and deepens the LDS reduction.
+                //
+                // In that regime we shrink the block to raise occupancy and
+                // shorten the reduction. We keep the original 1024-thread block
+                // whenever the grid is small (few row-blocks), so those shapes
+                // launch byte-for-byte identically to the baseline and cannot
+                // regress. nnz gates how many wavefronts are actually useful for
+                // the reduction (no point spreading a sparse vector shorter than
+                // a wavefront over 32 wavefronts).
+                //
+                // GEMVI_SATURATION_NBLOCKS is the empirically tuned large-grid
+                // crossover on gfx1201; below it we reproduce the baseline
+                // launch exactly.
+                constexpr int64_t GEMVI_SATURATION_NBLOCKS = 1024;
+                const int64_t     gemvi_nblocks            = (static_cast<int64_t>(m) - 1) / 32 + 1;
+                uint32_t          gemvi_dim                = GEMVI_DIM;
+                if(gemvi_nblocks >= GEMVI_SATURATION_NBLOCKS)
+                {
+                    gemvi_dim = (nnz <= static_cast<I>(handle->wavefront_size)) ? 256 : 512;
+                }
 
-        //                 // RDNA4 (gfx1201, wave32) launch tuning.
-        //                 //
-        //                 // Each block processes WFSIZE(=32) output rows and spreads the
-        //                 // sparse-vector dot product across BLOCKSIZE/32 wavefronts,
-        //                 // reducing the partial sums through LDS. The baseline always
-        //                 // used a 1024-thread block (32 wavefronts). gemvi is memory
-        //                 // bound, so when there are already enough row-blocks to saturate
-        //                 // the GPU, a 1024-thread block is oversized: it caps occupancy
-        //                 // (fewer concurrent blocks per CU) and deepens the LDS reduction.
-        //                 //
-        //                 // In that regime we shrink the block to raise occupancy and
-        //                 // shorten the reduction. We keep the original 1024-thread block
-        //                 // whenever the grid is small (few row-blocks), so those shapes
-        //                 // launch byte-for-byte identically to the baseline and cannot
-        //                 // regress. nnz gates how many wavefronts are actually useful for
-        //                 // the reduction (no point spreading a sparse vector shorter than
-        //                 // a wavefront over 32 wavefronts).
-        //                 //
-        //                 // GEMVI_SATURATION_NBLOCKS is the empirically tuned large-grid
-        //                 // crossover on gfx1201; below it we reproduce the baseline
-        //                 // launch exactly.
-        //                 constexpr int64_t GEMVI_SATURATION_NBLOCKS = 1024;
-        //                 const int64_t     gemvi_nblocks            = (static_cast<int64_t>(m) - 1) / 32 + 1;
-        //                 uint32_t          gemvi_dim                = GEMVI_DIM;
-        //                 if(gemvi_nblocks >= GEMVI_SATURATION_NBLOCKS)
-        //                 {
-        //                     gemvi_dim = (nnz <= static_cast<I>(handle->wavefront_size)) ? 256 : 512;
-        //                 }
+                switch(gemvi_dim)
+                {
+                case 256:
+                    LAUNCH_GEMVI_WAVE32(256);
+                    break;
+                case 512:
+                    LAUNCH_GEMVI_WAVE32(512);
+                    break;
+                default:
+                    LAUNCH_GEMVI_WAVE32(1024);
+                    break;
+                }
+            }
+            else
+            {
+                rocsparse_host_assert(handle->wavefront_size == 64,
+                                      "Wrong wavefront size dispatch.");
 
-        //                 switch(gemvi_dim)
-        //                 {
-        //                 case 256:
-        //                     LAUNCH_GEMVI_WAVE32(256);
-        //                     break;
-        //                 case 512:
-        //                     LAUNCH_GEMVI_WAVE32(512);
-        //                     break;
-        //                 default:
-        //                     LAUNCH_GEMVI_WAVE32(1024);
-        //                     break;
-        //                 }
-        //             }
-        //             else
-        //             {
-        //                 rocsparse_host_assert(handle->wavefront_size == 64,
-        //                                       "Wrong wavefront size dispatch.");
+                dim3 gemvi_blocks((m - 1) / 64 + 1);
+                dim3 gemvi_threads(GEMVI_DIM);
 
-        //                 dim3 gemvi_blocks((m - 1) / 64 + 1);
-        //                 dim3 gemvi_threads(GEMVI_DIM);
-
-        //                 RETURN_IF_HIPLAUNCHKERNELGGL_ERROR(
-        //                     (rocsparse::gemvi_kernel<GEMVI_DIM, 64>),
-        //                     gemvi_blocks,
-        //                     gemvi_threads,
-        //                     0,
-        //                     handle->stream,
-        //                     m,
-        //                     n,
-        //                     ROCSPARSE_DEVICE_HOST_SCALAR_ARGS(handle, alpha_device_host),
-        //                     A,
-        //                     lda,
-        //                     nnz,
-        //                     x_val,
-        //                     x_ind,
-        //                     ROCSPARSE_DEVICE_HOST_SCALAR_ARGS(handle, beta_device_host),
-        //                     y,
-        //                     idx_base,
-        //                     handle->pointer_mode == rocsparse_pointer_mode_host);
-        //             }
-        // #undef GEMVI_DIM
-        //         }
-        //         else
-        //         {
-        //             RETURN_IF_ROCSPARSE_ERROR(rocsparse_status_not_implemented);
-        //         }
+                RETURN_IF_HIPLAUNCHKERNELGGL_ERROR(
+                    (rocsparse::gemvi_kernel<GEMVI_DIM, 64>),
+                    gemvi_blocks,
+                    gemvi_threads,
+                    0,
+                    handle->stream,
+                    m,
+                    n,
+                    ROCSPARSE_DEVICE_HOST_SCALAR_ARGS(handle, alpha_device_host),
+                    A,
+                    lda,
+                    nnz,
+                    x_val,
+                    x_ind,
+                    ROCSPARSE_DEVICE_HOST_SCALAR_ARGS(handle, beta_device_host),
+                    y,
+                    idx_base,
+                    handle->pointer_mode == rocsparse_pointer_mode_host);
+            }
+#undef GEMVI_DIM
+        }
+        else
+        {
+            RETURN_IF_ROCSPARSE_ERROR(rocsparse_status_not_implemented);
+        }
+*/
 
         return rocsparse_status_success;
     }
@@ -404,22 +450,26 @@ extern "C" {
 // Definition of the C-implementation
 
 // rocsparse_xgemvi_buffer_size
-#define CAPI_IMPL(name_, type_)                                       \
-    rocsparse_status name_(rocsparse_handle    handle,                \
-                           rocsparse_operation trans,                 \
-                           rocsparse_int       m,                     \
-                           rocsparse_int       n,                     \
-                           rocsparse_int       nnz,                   \
-                           size_t*             buffer_size)           \
-    try                                                               \
-    {                                                                 \
-        ROCSPARSE_ROUTINE_TRACE;                                      \
-        *buffer_size = sizeof(type_) * 32 * 256 * ((m - 1) / 32 + 1); \
-        return rocsparse_status_success;                              \
-    }                                                                 \
-    catch(...)                                                        \
-    {                                                                 \
-        RETURN_ROCSPARSE_EXCEPTION();                                 \
+#define CAPI_IMPL(name_, type_)                                                            \
+    rocsparse_status name_(rocsparse_handle    handle,                                     \
+                           rocsparse_operation trans,                                      \
+                           rocsparse_int       m,                                          \
+                           rocsparse_int       n,                                          \
+                           rocsparse_int       nnz,                                        \
+                           size_t*             buffer_size)                                \
+    try                                                                                    \
+    {                                                                                      \
+        ROCSPARSE_ROUTINE_TRACE;                                                           \
+        const int grid_y = (handle != nullptr)                                             \
+                               ? rocsparse::gemvi_part1_grid_y(handle->properties, m, nnz) \
+                               : rocsparse::gemvi_part1_max_grid_y;                        \
+        *buffer_size     = sizeof(type_) * rocsparse::gemvi_part1_wfsize * grid_y          \
+                       * rocsparse::gemvi_part1_grid_x(m);                                 \
+        return rocsparse_status_success;                                                   \
+    }                                                                                      \
+    catch(...)                                                                             \
+    {                                                                                      \
+        RETURN_ROCSPARSE_EXCEPTION();                                                      \
     }
 
 // C-implementations
