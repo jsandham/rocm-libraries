@@ -26,6 +26,84 @@ include: rocsparse_common.yaml
 
 
 Tests:
+- name: gtsv
+  category: quick
+  function: gtsv
+  precision: *double_only_precisions
+  M: [32]
+  N: [1, 2, 3, 4, 5]
+  denseld: [32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50]
+  matrix: [rocsparse_matrix_random]
+
+# - name: gtsv
+#   category: quick
+#   function: gtsv
+#   precision: *single_double_precisions_complex_real
+#   M: [260]
+#   N: [1, 2, 3, 4, 5]
+#   denseld: [260]
+#   matrix: [rocsparse_matrix_random]
+
+# - name: gtsv
+#   category: quick
+#   function: gtsv
+#   precision: *single_double_precisions_complex_real
+#   M: [1000]
+#   N: [1, 2, 3, 4, 5]
+#   denseld: [1000]
+#   matrix: [rocsparse_matrix_random]
+
+# - name: gtsv
+#   category: quick
+#   function: gtsv
+#   precision: *single_double_precisions_complex_real
+#   M: [1756]
+#   N: [1, 2, 3, 4, 5]
+#   denseld: [1756]
+#   matrix: [rocsparse_matrix_random]
+
+# - name: gtsv
+#   category: quick
+#   function: gtsv
+#   precision: *single_double_precisions_complex_real
+#   M: [10465]
+#   N: [1, 2, 3, 4, 5]
+#   denseld: [10465]
+#   matrix: [rocsparse_matrix_random]
+
+# - name: gtsv
+#   category: quick
+#   function: gtsv
+#   precision: *single_double_precisions_complex_real
+#   M: [54672]
+#   N: [1, 2, 3, 4, 5]
+#   denseld: [54672]
+#   matrix: [rocsparse_matrix_random]
+
+# - name: gtsv
+#   category: quick
+#   function: gtsv
+#   precision: *single_double_precisions_complex_real
+#   M: [127465]
+#   N: [1, 2, 3, 4, 5]
+#   denseld: [127465]
+#   matrix: [rocsparse_matrix_random]
+
+# - name: gtsv
+#   category: quick
+#   function: gtsv
+#   precision: *single_double_precisions_complex_real
+#   M: [1846372]
+#   N: [1, 2, 3, 4, 5]
+#   denseld: [1846372]
+#   matrix: [rocsparse_matrix_random]
+
+
+
+
+
+
+
 # Quick
 - name: gtsv
   category: quick

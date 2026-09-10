@@ -22,10 +22,62 @@
  *
  * ************************************************************************ */
 
+#include <map>
+#include <vector>
+
 #include "internal/precond/rocsparse_gtsv.h"
 #include "rocsparse_gtsv.hpp"
 
 #include "gtsv_device.h"
+
+namespace rocsparse
+{
+    static uint64_t next_power_of_two(uint64_t m)
+    {
+        if(m == 0)
+        {
+            return 1;
+        }
+
+        m--;
+
+        m |= m >> 1;
+        m |= m >> 2;
+        m |= m >> 4;
+        m |= m >> 8;
+        m |= m >> 16;
+        m |= m >> 32;
+
+        return m + 1;
+    }
+
+    template <typename T>
+    inline size_t align256(size_t size)
+    {
+        return ((sizeof(T) * size - 1) / 256 + 1) * 256;
+    }
+
+    template <typename T>
+    struct gtsv_buffer_data
+    {
+        static constexpr int MAX_RECURSION_LEVELS = 3;
+        static constexpr int BLOCKDIM             = 256;
+
+        T* dl_pad[MAX_RECURSION_LEVELS];
+        T* d_pad[MAX_RECURSION_LEVELS];
+        T* du_pad[MAX_RECURSION_LEVELS];
+        T* B_pad[MAX_RECURSION_LEVELS];
+
+        T* w_pad[MAX_RECURSION_LEVELS];
+        T* v_pad[MAX_RECURSION_LEVELS];
+        T* mt_pad[MAX_RECURSION_LEVELS];
+
+        T* sl[MAX_RECURSION_LEVELS];
+        T* s[MAX_RECURSION_LEVELS];
+        T* su[MAX_RECURSION_LEVELS];
+        T* sB[MAX_RECURSION_LEVELS];
+    };
+}
 
 template <typename T>
 rocsparse_status rocsparse::gtsv_buffer_size_template(rocsparse_handle handle,
@@ -76,38 +128,33 @@ rocsparse_status rocsparse::gtsv_buffer_size_template(rocsparse_handle handle,
         return rocsparse_status_success;
     }
 
-    constexpr uint32_t BLOCKSIZE = 256;
-
-    rocsparse_int block_dim = 2;
-    rocsparse_int m_pad     = ((m - 1) / (block_dim * BLOCKSIZE) + 1) * (block_dim * BLOCKSIZE);
-    rocsparse_int gridsize  = ((m_pad / block_dim - 1) / BLOCKSIZE + 1);
-    while(gridsize > 512)
-    {
-        block_dim *= 2;
-        m_pad    = ((m - 1) / (block_dim * BLOCKSIZE) + 1) * (block_dim * BLOCKSIZE);
-        gridsize = ((m_pad / block_dim - 1) / BLOCKSIZE + 1);
-    }
-
-    // round up to next power of 2
-    gridsize = fnp2(gridsize);
-
     *buffer_size = 0;
 
-    *buffer_size += ((sizeof(T) * m_pad - 1) / 256 + 1) * 256; // dl_pad
-    *buffer_size += ((sizeof(T) * m_pad - 1) / 256 + 1) * 256; // d_pad
-    *buffer_size += ((sizeof(T) * m_pad - 1) / 256 + 1) * 256; // du_pad
-    *buffer_size += ((sizeof(T) * m_pad * n - 1) / 256 + 1) * 256; // rhs_pad
-    *buffer_size += ((sizeof(T) * m_pad - 1) / 256 + 1) * 256; // w_pad
-    *buffer_size += ((sizeof(T) * m_pad - 1) / 256 + 1) * 256; // v_pad
-    *buffer_size += ((sizeof(T) * m_pad - 1) / 256 + 1) * 256; // w2_pad
-    *buffer_size += ((sizeof(T) * m_pad - 1) / 256 + 1) * 256; // v2_pad
-    *buffer_size += ((sizeof(T) * m_pad - 1) / 256 + 1) * 256; // mt_pad
+    constexpr int BLOCKDIM = gtsv_buffer_data<T>::BLOCKDIM;
 
-    *buffer_size += ((sizeof(T) * 2 * gridsize * n - 1) / 256 + 1) * 256; // rhs_scratch
-    *buffer_size += ((sizeof(T) * 2 * gridsize - 1) / 256 + 1) * 256; // w_scratch
-    *buffer_size += ((sizeof(T) * 2 * gridsize - 1) / 256 + 1) * 256; // v_scratch
+    int current_m = m;
+    for(int level = 0; level < 3; level++)
+    {
+        int m_pad = static_cast<int>(next_power_of_two(static_cast<uint64_t>(current_m)));
+        m_pad     = rocsparse::max(m_pad, BLOCKDIM);
 
-    *buffer_size += ((sizeof(rocsparse_int) * m_pad - 1) / 256 + 1) * 256; // pivot_pad
+        *buffer_size += align256<T>(m_pad); // dl_pad
+        *buffer_size += align256<T>(m_pad); // d_pad
+        *buffer_size += align256<T>(m_pad); // du_pad
+        *buffer_size += align256<T>(m_pad * n); // B_pad
+        *buffer_size += align256<T>(m_pad); // w_pad
+        *buffer_size += align256<T>(m_pad); // v_pad
+        *buffer_size += align256<T>(m_pad); // mt_pad
+
+        const int S_size = 2 * m_pad / BLOCKDIM;
+
+        *buffer_size += align256<T>(S_size); // sl
+        *buffer_size += align256<T>(S_size); // s
+        *buffer_size += align256<T>(S_size); // su
+        *buffer_size += align256<T>(S_size * n); // sB
+
+        current_m = S_size;
+    }
 
     return rocsparse_status_success;
 }
@@ -115,383 +162,381 @@ rocsparse_status rocsparse::gtsv_buffer_size_template(rocsparse_handle handle,
 namespace rocsparse
 {
     template <uint32_t BLOCKSIZE, uint32_t BLOCKDIM, typename T>
-    static rocsparse_status gtsv_spike_solver_template(rocsparse_handle handle,
-                                                       rocsparse_int    m,
-                                                       rocsparse_int    n,
-                                                       rocsparse_int    m_pad,
-                                                       rocsparse_int    gridsize,
-                                                       const T*         dl,
-                                                       const T*         d,
-                                                       const T*         du,
-                                                       T*               B,
-                                                       rocsparse_int    ldb,
-                                                       void*            temp_buffer)
+    static rocsparse_status launch_data_marshaling(rocsparse_handle handle,
+                                                   int              m,
+                                                   int              m_pad,
+                                                   const T*         dl,
+                                                   const T*         d,
+                                                   const T*         du,
+                                                   T*               dl_pad,
+                                                   T*               d_pad,
+                                                   T*               du_pad)
     {
-        ROCSPARSE_ROUTINE_TRACE;
+        constexpr uint32_t TILE    = rocsparse::gtsv_marshal_tile<BLOCKSIZE>::TILE;
+        const int          nblocks = m_pad / static_cast<int>(BLOCKDIM);
 
-        char* ptr    = reinterpret_cast<char*>(temp_buffer);
-        T*    dl_pad = reinterpret_cast<T*>(ptr);
-        ptr += ((sizeof(T) * m_pad - 1) / 256 + 1) * 256;
-        T* d_pad = reinterpret_cast<T*>(ptr);
-        ptr += ((sizeof(T) * m_pad - 1) / 256 + 1) * 256;
-        T* du_pad = reinterpret_cast<T*>(ptr);
-        ptr += ((sizeof(T) * m_pad - 1) / 256 + 1) * 256;
-        T* rhs_pad = reinterpret_cast<T*>(ptr);
-        ptr += ((sizeof(T) * m_pad * n - 1) / 256 + 1) * 256;
-        T* w_pad = reinterpret_cast<T*>(ptr);
-        ptr += ((sizeof(T) * m_pad - 1) / 256 + 1) * 256;
-        T* v_pad = reinterpret_cast<T*>(ptr);
-        ptr += ((sizeof(T) * m_pad - 1) / 256 + 1) * 256;
-        T* w2_pad = reinterpret_cast<T*>(ptr);
-        ptr += ((sizeof(T) * m_pad - 1) / 256 + 1) * 256;
-        T* v2_pad = reinterpret_cast<T*>(ptr);
-        ptr += ((sizeof(T) * m_pad - 1) / 256 + 1) * 256;
-        T* mt_pad = reinterpret_cast<T*>(ptr);
-        ptr += ((sizeof(T) * m_pad - 1) / 256 + 1) * 256;
+        // std::vector<T> hl(m, 0);
+        // RETURN_IF_HIP_ERROR(hipMemcpy(hl.data(), dl, sizeof(T) * m, hipMemcpyDeviceToHost));
 
-        T* rhs_scratch = reinterpret_cast<T*>(ptr);
-        ptr += ((sizeof(T) * 2 * gridsize * n - 1) / 256 + 1) * 256;
-        T* w_scratch = reinterpret_cast<T*>(ptr);
-        ptr += ((sizeof(T) * 2 * gridsize - 1) / 256 + 1) * 256;
-        T* v_scratch = reinterpret_cast<T*>(ptr);
-        ptr += ((sizeof(T) * 2 * gridsize - 1) / 256 + 1) * 256;
-
-        rocsparse_int* pivot_pad = reinterpret_cast<rocsparse_int*>(ptr);
-        //    ptr += ((sizeof(rocsparse_int) * m_pad - 1) / 256 + 1) * 256;
+        // std::cout << "hl" << std::endl;
+        // for(int i = 0; i < m; i++)
+        // {
+        //     std::cout << hl[i] << " ";
+        // }
+        // std::cout << "" << std::endl;
 
         RETURN_IF_HIPLAUNCHKERNELGGL_ERROR(
-            (rocsparse::gtsv_transpose_and_pad_array_shared_kernel<BLOCKSIZE, BLOCKDIM>),
-            dim3((m_pad - 1) / BLOCKSIZE + 1),
-            dim3(BLOCKSIZE),
+            (rocsparse::data_marshaling_kernel<BLOCKSIZE, BLOCKDIM>),
+            dim3((BLOCKDIM + TILE - 1) / TILE, (nblocks + TILE - 1) / TILE),
+            dim3(TILE, BLOCKSIZE / TILE),
             0,
             handle->stream,
             m,
-            m_pad,
             m_pad,
             dl,
-            dl_pad,
-            static_cast<T>(0));
-
-        RETURN_IF_HIPLAUNCHKERNELGGL_ERROR(
-            (rocsparse::gtsv_transpose_and_pad_array_shared_kernel<BLOCKSIZE, BLOCKDIM>),
-            dim3((m_pad - 1) / BLOCKSIZE + 1),
-            dim3(BLOCKSIZE),
-            0,
-            handle->stream,
-            m,
-            m_pad,
-            m_pad,
             d,
-            d_pad,
-            static_cast<T>(1));
-
-        RETURN_IF_HIPLAUNCHKERNELGGL_ERROR(
-            (rocsparse::gtsv_transpose_and_pad_array_shared_kernel<BLOCKSIZE, BLOCKDIM>),
-            dim3((m_pad - 1) / BLOCKSIZE + 1),
-            dim3(BLOCKSIZE),
-            0,
-            handle->stream,
-            m,
-            m_pad,
-            m_pad,
             du,
-            du_pad,
-            static_cast<T>(0));
+            dl_pad,
+            d_pad,
+            du_pad);
+
+        // std::vector<T> hl_pad(m_pad, 0);
+        // RETURN_IF_HIP_ERROR(
+        //     hipMemcpy(hl_pad.data(), dl_pad, sizeof(T) * m_pad, hipMemcpyDeviceToHost));
+
+        // std::cout << "hl_pad" << std::endl;
+        // for(int i = 0; i < m_pad; i++)
+        // {
+        //     std::cout << hl_pad[i] << " ";
+        // }
+        // std::cout << "" << std::endl;
+
+        return rocsparse_status_success;
+    }
+
+    template <uint32_t BLOCKSIZE, uint32_t BLOCKDIM, typename T>
+    static rocsparse_status launch_data_marshaling_B(
+        rocsparse_handle handle, int m, int m_pad, int n, int ldb, const T* B, T* B_pad)
+    {
+        constexpr uint32_t TILE    = rocsparse::gtsv_marshal_tile<BLOCKSIZE>::TILE;
+        const int          nblocks = m_pad / static_cast<int>(BLOCKDIM);
 
         RETURN_IF_HIPLAUNCHKERNELGGL_ERROR(
-            (rocsparse::gtsv_transpose_and_pad_array_shared_kernel<BLOCKSIZE, BLOCKDIM>),
-            dim3((m_pad - 1) / BLOCKSIZE + 1, n),
-            dim3(BLOCKSIZE),
+            (rocsparse::data_marshaling_B_kernel<BLOCKSIZE, BLOCKDIM>),
+            dim3((BLOCKDIM + TILE - 1) / TILE, (nblocks + TILE - 1) / TILE, std::min(n, 65535)),
+            dim3(TILE, BLOCKSIZE / TILE),
             0,
             handle->stream,
             m,
             m_pad,
+            n,
             ldb,
             B,
-            rhs_pad,
-            static_cast<T>(0));
+            B_pad);
+        return rocsparse_status_success;
+    }
 
-        RETURN_IF_HIP_ERROR(rocsparse_hipMemsetAsync(w_pad, 0, m_pad * sizeof(T), handle->stream));
-        RETURN_IF_HIP_ERROR(rocsparse_hipMemsetAsync(v_pad, 0, m_pad * sizeof(T), handle->stream));
-
-        RETURN_IF_HIPLAUNCHKERNELGGL_ERROR((rocsparse::gtsv_LBM_wv_kernel<BLOCKSIZE, BLOCKDIM>),
-                                           dim3(gridsize),
+    template <uint32_t BLOCKSIZE, uint32_t BLOCKDIM, typename T>
+    static rocsparse_status launch_LBMT_solve_wvmt(rocsparse_handle handle,
+                                                   int              m_pad,
+                                                   const T*         dl_pad,
+                                                   const T*         d_pad,
+                                                   const T*         du_pad,
+                                                   T*               w_pad,
+                                                   T*               v_pad,
+                                                   T*               mt_pad)
+    {
+        RETURN_IF_HIPLAUNCHKERNELGGL_ERROR((rocsparse::LBMT_solve_wvmt_kernel<BLOCKSIZE, BLOCKDIM>),
+                                           dim3(((m_pad / BLOCKDIM) - 1) / BLOCKSIZE + 1),
                                            dim3(BLOCKSIZE),
                                            0,
                                            handle->stream,
                                            m_pad,
-                                           n,
-                                           ldb,
                                            dl_pad,
                                            d_pad,
                                            du_pad,
                                            w_pad,
                                            v_pad,
+                                           mt_pad);
+        return rocsparse_status_success;
+    }
+
+    template <uint32_t BLOCKSIZE, uint32_t BLOCKDIM, typename T>
+    static rocsparse_status launch_LBMT_solve_rhs(rocsparse_handle handle,
+                                                  int              m_pad,
+                                                  int              n,
+                                                  const T*         dl_pad,
+                                                  const T*         d_pad,
+                                                  const T*         du_pad,
+                                                  const T*         mt_pad,
+                                                  T*               B_pad)
+    {
+        RETURN_IF_HIPLAUNCHKERNELGGL_ERROR((rocsparse::LBMT_solve_rhs_kernel<BLOCKSIZE, BLOCKDIM>),
+                                           dim3(((m_pad / BLOCKDIM) - 1) / BLOCKSIZE + 1, n, 1),
+                                           dim3(BLOCKSIZE, 1, 1),
+                                           0,
+                                           handle->stream,
+                                           m_pad,
+                                           n,
+                                           dl_pad,
+                                           d_pad,
+                                           du_pad,
                                            mt_pad,
-                                           pivot_pad);
+                                           B_pad);
+        return rocsparse_status_success;
+    }
 
-        if(n % 8 == 0)
-        {
-            RETURN_IF_HIPLAUNCHKERNELGGL_ERROR(
-                (rocsparse::gtsv_LBM_rhs_kernel<BLOCKSIZE, BLOCKDIM, 8>),
-                dim3(gridsize, n / 8),
-                dim3(BLOCKSIZE),
-                0,
-                handle->stream,
-                m_pad,
-                n,
-                ldb,
-                dl_pad,
-                d_pad,
-                du_pad,
-                rhs_pad,
-                mt_pad,
-                pivot_pad);
-        }
-        else if(n % 4 == 0)
-        {
-            RETURN_IF_HIPLAUNCHKERNELGGL_ERROR(
-                (rocsparse::gtsv_LBM_rhs_kernel<BLOCKSIZE, BLOCKDIM, 4>),
-                dim3(gridsize, n / 4),
-                dim3(BLOCKSIZE),
-                0,
-                handle->stream,
-                m_pad,
-                n,
-                ldb,
-                dl_pad,
-                d_pad,
-                du_pad,
-                rhs_pad,
-                mt_pad,
-                pivot_pad);
-        }
-        else if(n % 2 == 0)
-        {
-            RETURN_IF_HIPLAUNCHKERNELGGL_ERROR(
-                (rocsparse::gtsv_LBM_rhs_kernel<BLOCKSIZE, BLOCKDIM, 2>),
-                dim3(gridsize, n / 2),
-                dim3(BLOCKSIZE),
-                0,
-                handle->stream,
-                m_pad,
-                n,
-                ldb,
-                dl_pad,
-                d_pad,
-                du_pad,
-                rhs_pad,
-                mt_pad,
-                pivot_pad);
-        }
-        else
-        {
-            RETURN_IF_HIPLAUNCHKERNELGGL_ERROR(
-                (rocsparse::gtsv_LBM_rhs_kernel<BLOCKSIZE, BLOCKDIM, 1>),
-                dim3(gridsize, n),
-                dim3(BLOCKSIZE),
-                0,
-                handle->stream,
-                m_pad,
-                n,
-                ldb,
-                dl_pad,
-                d_pad,
-                du_pad,
-                rhs_pad,
-                mt_pad,
-                pivot_pad);
-        }
+    template <uint32_t BLOCKSIZE, uint32_t BLOCKDIM, typename T>
+    static rocsparse_status launch_fill_s_matrix(rocsparse_handle handle,
+                                                 int              m_pad,
+                                                 int              n,
+                                                 const T*         w_pad,
+                                                 const T*         v_pad,
+                                                 const T*         B_pad,
+                                                 T*               sl,
+                                                 T*               s,
+                                                 T*               su,
+                                                 T*               sB)
+    {
+        const int s_size = 2 * m_pad / BLOCKDIM;
+        const int s_grid = (s_size - 1) / BLOCKSIZE + 1;
 
-        RETURN_IF_HIP_ERROR(rocsparse_hipMemcpyAsync(
-            w2_pad, w_pad, m_pad * sizeof(T), hipMemcpyDeviceToDevice, handle->stream));
-        RETURN_IF_HIP_ERROR(rocsparse_hipMemcpyAsync(
-            v2_pad, v_pad, m_pad * sizeof(T), hipMemcpyDeviceToDevice, handle->stream));
+        RETURN_IF_HIPLAUNCHKERNELGGL_ERROR((rocsparse::fill_s_matrix_kernel<BLOCKSIZE, BLOCKDIM>),
+                                           dim3(s_grid, std::min(n, 65535), 1),
+                                           dim3(BLOCKSIZE, 1, 1),
+                                           0,
+                                           handle->stream,
+                                           m_pad,
+                                           n,
+                                           w_pad,
+                                           v_pad,
+                                           B_pad,
+                                           sl,
+                                           s,
+                                           su,
+                                           sB);
+        return rocsparse_status_success;
+    }
+
+    template <typename T, uint32_t S_SIZE>
+    static rocsparse_status launch_s_solve_kernel(
+        rocsparse_handle handle, int m, int n, const T* sl, const T* s, const T* su, T* sB)
+    {
+        RETURN_IF_HIPLAUNCHKERNELGGL_ERROR((rocsparse::S_solve_kernel<S_SIZE>),
+                                           dim3(n),
+                                           dim3(1),
+                                           0,
+                                           handle->stream,
+                                           m,
+                                           n,
+                                           sl,
+                                           s,
+                                           su,
+                                           sB);
+        return rocsparse_status_success;
+    }
+
+    template <uint32_t BLOCKDIM, uint32_t BLOCKSIZE, typename T>
+    static rocsparse_status launch_scatter_S_B_to_B_pad(
+        rocsparse_handle handle, int m_pad, int n, const T* sB, T* B_pad)
+    {
+        const int s_size = 2 * m_pad / BLOCKDIM;
+        dim3      scatter_grid((s_size / 2 + BLOCKSIZE - 1) / BLOCKSIZE, std::min(n, 65535));
 
         RETURN_IF_HIPLAUNCHKERNELGGL_ERROR(
-            (rocsparse::gtsv_spike_block_level_kernel<BLOCKSIZE, BLOCKDIM>),
-            dim3(gridsize, n),
+            (rocsparse::scatter_S_B_to_B_pad_kernel<BLOCKDIM, BLOCKSIZE>),
+            scatter_grid,
             dim3(BLOCKSIZE),
             0,
             handle->stream,
+            s_size,
             m_pad,
             n,
-            ldb,
-            rhs_pad,
-            w_pad,
-            v_pad,
-            w2_pad,
-            v2_pad,
-            rhs_scratch,
-            w_scratch,
-            v_scratch);
+            sB,
+            B_pad);
+        return rocsparse_status_success;
+    }
 
-        // gridsize is always a power of 2
-        if(gridsize == 2)
-        {
-            RETURN_IF_HIPLAUNCHKERNELGGL_ERROR((rocsparse::gtsv_solve_spike_grid_level_kernel<2>),
-                                               dim3(1, n),
-                                               dim3(2),
-                                               0,
-                                               handle->stream,
-                                               m_pad,
-                                               n,
-                                               ldb,
-                                               rhs_scratch,
-                                               w_scratch,
-                                               v_scratch);
-        }
-        else if(gridsize == 4)
-        {
-            RETURN_IF_HIPLAUNCHKERNELGGL_ERROR((rocsparse::gtsv_solve_spike_grid_level_kernel<4>),
-                                               dim3(1, n),
-                                               dim3(4),
-                                               0,
-                                               handle->stream,
-                                               m_pad,
-                                               n,
-                                               ldb,
-                                               rhs_scratch,
-                                               w_scratch,
-                                               v_scratch);
-        }
-        else if(gridsize == 8)
-        {
-            RETURN_IF_HIPLAUNCHKERNELGGL_ERROR((rocsparse::gtsv_solve_spike_grid_level_kernel<8>),
-                                               dim3(1, n),
-                                               dim3(8),
-                                               0,
-                                               handle->stream,
-                                               m_pad,
-                                               n,
-                                               ldb,
-                                               rhs_scratch,
-                                               w_scratch,
-                                               v_scratch);
-        }
-        else if(gridsize == 16)
-        {
-            RETURN_IF_HIPLAUNCHKERNELGGL_ERROR((rocsparse::gtsv_solve_spike_grid_level_kernel<16>),
-                                               dim3(1, n),
-                                               dim3(16),
-                                               0,
-                                               handle->stream,
-                                               m_pad,
-                                               n,
-                                               ldb,
-                                               rhs_scratch,
-                                               w_scratch,
-                                               v_scratch);
-        }
-        else if(gridsize == 32)
-        {
-            RETURN_IF_HIPLAUNCHKERNELGGL_ERROR((rocsparse::gtsv_solve_spike_grid_level_kernel<32>),
-                                               dim3(1, n),
-                                               dim3(32),
-                                               0,
-                                               handle->stream,
-                                               m_pad,
-                                               n,
-                                               ldb,
-                                               rhs_scratch,
-                                               w_scratch,
-                                               v_scratch);
-        }
-        else if(gridsize == 64)
-        {
-            RETURN_IF_HIPLAUNCHKERNELGGL_ERROR((rocsparse::gtsv_solve_spike_grid_level_kernel<64>),
-                                               dim3(1, n),
-                                               dim3(64),
-                                               0,
-                                               handle->stream,
-                                               m_pad,
-                                               n,
-                                               ldb,
-                                               rhs_scratch,
-                                               w_scratch,
-                                               v_scratch);
-        }
-        else if(gridsize == 128)
-        {
-            RETURN_IF_HIPLAUNCHKERNELGGL_ERROR((rocsparse::gtsv_solve_spike_grid_level_kernel<128>),
-                                               dim3(1, n),
-                                               dim3(128),
-                                               0,
-                                               handle->stream,
-                                               m_pad,
-                                               n,
-                                               ldb,
-                                               rhs_scratch,
-                                               w_scratch,
-                                               v_scratch);
-        }
-        else if(gridsize == 256)
-        {
-            RETURN_IF_HIPLAUNCHKERNELGGL_ERROR((rocsparse::gtsv_solve_spike_grid_level_kernel<256>),
-                                               dim3(1, n),
-                                               dim3(256),
-                                               0,
-                                               handle->stream,
-                                               m_pad,
-                                               n,
-                                               ldb,
-                                               rhs_scratch,
-                                               w_scratch,
-                                               v_scratch);
-        }
-        else if(gridsize == 512)
-        {
-            RETURN_IF_HIPLAUNCHKERNELGGL_ERROR((rocsparse::gtsv_solve_spike_grid_level_kernel<512>),
-                                               dim3(1, n),
-                                               dim3(512),
-                                               0,
-                                               handle->stream,
-                                               m_pad,
-                                               n,
-                                               ldb,
-                                               rhs_scratch,
-                                               w_scratch,
-                                               v_scratch);
-        }
+    template <uint32_t BLOCKSIZE, uint32_t BLOCKDIM, typename T>
+    static rocsparse_status launch_backward_solve(
+        rocsparse_handle handle, int m_pad, int n, const T* w_pad, const T* v_pad, T* B_pad)
+    {
+        // const int grid = ((m_pad / BLOCKDIM) - 1) / BLOCKSIZE + 1;
+        const int grid = (m_pad - 1) / BLOCKSIZE + 1;
+
+        // RETURN_IF_HIPLAUNCHKERNELGGL_ERROR((rocsparse::backward_solve_kernel<BLOCKSIZE, BLOCKDIM>),
+        //                                    dim3(grid, std::min(n, 65535), 1),
+        //                                    dim3(BLOCKSIZE, 1, 1),
+        //                                    0,
+        //                                    handle->stream,
+        //                                    m_pad,
+        //                                    n,
+        //                                    w_pad,
+        //                                    v_pad,
+        //                                    B_pad);
+        RETURN_IF_HIPLAUNCHKERNELGGL_ERROR((rocsparse::backward_solve_kernel<BLOCKSIZE, BLOCKDIM>),
+                                           dim3(grid, 1, 1),
+                                           dim3(BLOCKSIZE, 1, 1),
+                                           0,
+                                           handle->stream,
+                                           m_pad,
+                                           n,
+                                           w_pad,
+                                           v_pad,
+                                           B_pad);
+        return rocsparse_status_success;
+    }
+
+    template <uint32_t BLOCKSIZE, uint32_t BLOCKDIM, typename T>
+    static rocsparse_status launch_data_marshaling2(
+        rocsparse_handle handle, int m, int m_pad, int n, int ldb, const T* B_pad, T* B)
+    {
+        constexpr uint32_t TILE    = rocsparse::gtsv_marshal_tile<BLOCKSIZE>::TILE;
+        const int          nblocks = m_pad / static_cast<int>(BLOCKDIM);
 
         RETURN_IF_HIPLAUNCHKERNELGGL_ERROR(
-            (rocsparse::gtsv_solve_spike_propagate_kernel<BLOCKSIZE, BLOCKDIM>),
-            dim3(gridsize, n),
-            dim3(BLOCKSIZE),
-            0,
-            handle->stream,
-            m_pad,
-            n,
-            ldb,
-            rhs_pad,
-            w2_pad,
-            v2_pad,
-            rhs_scratch);
-
-        RETURN_IF_HIPLAUNCHKERNELGGL_ERROR(
-            (rocsparse::gtsv_spike_backward_substitution_kernel<BLOCKSIZE, BLOCKDIM>),
-            dim3(gridsize, n),
-            dim3(BLOCKSIZE),
-            0,
-            handle->stream,
-            m_pad,
-            n,
-            ldb,
-            rhs_pad,
-            w2_pad,
-            v2_pad);
-
-        RETURN_IF_HIPLAUNCHKERNELGGL_ERROR(
-            (rocsparse::gtsv_transpose_back_array_kernel<BLOCKSIZE, BLOCKDIM>),
-            dim3((m_pad - 1) / BLOCKSIZE + 1, n),
-            dim3(BLOCKSIZE),
+            (rocsparse::data_marshaling_kernel2<BLOCKSIZE, BLOCKDIM>),
+            dim3((BLOCKDIM + TILE - 1) / TILE, (nblocks + TILE - 1) / TILE, std::min(n, 65535)),
+            dim3(TILE, BLOCKSIZE / TILE),
             0,
             handle->stream,
             m,
             m_pad,
+            n,
             ldb,
-            rhs_pad,
+            B_pad,
             B);
+        return rocsparse_status_success;
+    }
+
+    template <uint32_t BLOCKDIM, typename T>
+    static rocsparse_status gtsv_spike_solver_template(rocsparse_handle handle,
+                                                       rocsparse_int    m,
+                                                       rocsparse_int    n,
+                                                       rocsparse_int    ldb,
+                                                       const T*         dl, //lower_diag,
+                                                       const T*         d, //main_diag,
+                                                       const T*         du, //upper_diag,
+                                                       T*               B,
+                                                       T**              dl_pad, //lower_pad,
+                                                       T**              d_pad, //main_pad,
+                                                       T**              du_pad, //upper_pad,
+                                                       T**              B_pad,
+                                                       T**              w_pad,
+                                                       T**              v_pad,
+                                                       T**              mt_pad,
+                                                       T**              sl, //S_lower,
+                                                       T**              s, //S_main,
+                                                       T**              su, //S_upper,
+                                                       T**              sB,
+                                                       int              level = 0)
+    {
+        ROCSPARSE_ROUTINE_TRACE;
+
+        //std::cout << "gtsv_spike_solver_template level: " << level << std::endl;
+
+        constexpr int BLOCKSIZE = 256;
+
+        int m_pad = next_power_of_two(m);
+        m_pad     = rocsparse::max(m_pad, (int)BLOCKDIM);
+
+        const int s_size = 2 * m_pad / BLOCKDIM;
+
+        RETURN_IF_ROCSPARSE_ERROR((launch_data_marshaling<BLOCKSIZE, BLOCKDIM>(
+            handle, m, m_pad, dl, d, du, dl_pad[level], d_pad[level], du_pad[level])));
+
+        launch_data_marshaling_B<BLOCKSIZE, BLOCKDIM>(handle, m, m_pad, n, ldb, B, B_pad[level]);
+
+        RETURN_IF_HIP_ERROR(hipMemsetAsync(w_pad[level], 0, sizeof(T) * m_pad, handle->stream));
+        RETURN_IF_HIP_ERROR(hipMemsetAsync(v_pad[level], 0, sizeof(T) * m_pad, handle->stream));
+
+        RETURN_IF_ROCSPARSE_ERROR((launch_LBMT_solve_wvmt<BLOCKSIZE, BLOCKDIM>(handle,
+                                                                               m_pad,
+                                                                               dl_pad[level],
+                                                                               d_pad[level],
+                                                                               du_pad[level],
+                                                                               w_pad[level],
+                                                                               v_pad[level],
+                                                                               mt_pad[level])));
+
+        for(int i = 0; i < n; i += 65535)
+        {
+            RETURN_IF_ROCSPARSE_ERROR(
+                (launch_LBMT_solve_rhs<BLOCKSIZE, BLOCKDIM>(handle,
+                                                            m_pad,
+                                                            rocsparse::min(n - i, 65535),
+                                                            dl_pad[level],
+                                                            d_pad[level],
+                                                            du_pad[level],
+                                                            mt_pad[level],
+                                                            B_pad[level] + m_pad * i)));
+        }
+
+        RETURN_IF_ROCSPARSE_ERROR((launch_fill_s_matrix<BLOCKSIZE, BLOCKDIM>(handle,
+                                                                             m_pad,
+                                                                             n,
+                                                                             w_pad[level],
+                                                                             v_pad[level],
+                                                                             B_pad[level],
+                                                                             sl[level],
+                                                                             s[level],
+                                                                             su[level],
+                                                                             sB[level])));
+
+        using S_solve_launch_ptr
+            = rocsparse_status (*)(rocsparse_handle, int, int, const T*, const T*, const T*, T*);
+
+        static const std::map<int, S_solve_launch_ptr> s_solve_dispatch = {
+            {2, launch_s_solve_kernel<T, 2>},
+            {4, launch_s_solve_kernel<T, 4>},
+            {8, launch_s_solve_kernel<T, 8>},
+            {16, launch_s_solve_kernel<T, 16>},
+            {32, launch_s_solve_kernel<T, 32>},
+            {64, launch_s_solve_kernel<T, 64>},
+            {128, launch_s_solve_kernel<T, 128>},
+            {256, launch_s_solve_kernel<T, 256>},
+            {512, launch_s_solve_kernel<T, 512>},
+            {1024, launch_s_solve_kernel<T, 1024>},
+        };
+
+        auto dispatch_it = s_solve_dispatch.lower_bound(s_size);
+        if(dispatch_it != s_solve_dispatch.end())
+        {
+            RETURN_IF_ROCSPARSE_ERROR(
+                dispatch_it->second(handle, s_size, n, sl[level], s[level], su[level], sB[level]));
+        }
+        else
+        {
+            RETURN_IF_ROCSPARSE_ERROR(gtsv_spike_solver_template<BLOCKDIM>(handle,
+                                                                           s_size,
+                                                                           n,
+                                                                           s_size,
+                                                                           sl[level],
+                                                                           s[level],
+                                                                           su[level],
+                                                                           sB[level],
+                                                                           dl_pad,
+                                                                           d_pad,
+                                                                           du_pad,
+                                                                           B_pad,
+                                                                           w_pad,
+                                                                           v_pad,
+                                                                           mt_pad,
+                                                                           sl,
+                                                                           s,
+                                                                           su,
+                                                                           sB,
+                                                                           level + 1));
+        }
+
+        RETURN_IF_ROCSPARSE_ERROR((launch_scatter_S_B_to_B_pad<BLOCKDIM, BLOCKSIZE>(
+            handle, m_pad, n, sB[level], B_pad[level])));
+
+        RETURN_IF_ROCSPARSE_ERROR((launch_backward_solve<BLOCKSIZE, BLOCKDIM>(
+            handle, m_pad, n, w_pad[level], v_pad[level], B_pad[level])));
+
+        RETURN_IF_ROCSPARSE_ERROR((launch_data_marshaling2<BLOCKSIZE, BLOCKDIM>(
+            handle, m, m_pad, n, ldb, B_pad[level], B)));
 
         return rocsparse_status_success;
     }
@@ -543,74 +588,69 @@ rocsparse_status rocsparse::gtsv_template(rocsparse_handle handle,
         return rocsparse_status_success;
     }
 
-    constexpr uint32_t BLOCKSIZE = 256;
+    char* ptr = reinterpret_cast<char*>(temp_buffer);
 
-    rocsparse_int block_dim = 2;
-    rocsparse_int m_pad     = ((m - 1) / (block_dim * BLOCKSIZE) + 1) * (block_dim * BLOCKSIZE);
-    rocsparse_int gridsize  = ((m_pad / block_dim - 1) / BLOCKSIZE + 1);
+    gtsv_buffer_data<T> data;
 
-    while(gridsize > 512)
+    constexpr int BLOCKDIM = gtsv_buffer_data<T>::BLOCKDIM;
+
+    int current_m = m;
+    for(int level = 0; level < 3; level++)
     {
-        block_dim *= 2;
-        m_pad    = ((m - 1) / (block_dim * BLOCKSIZE) + 1) * (block_dim * BLOCKSIZE);
-        gridsize = ((m_pad / block_dim - 1) / BLOCKSIZE + 1);
+        int m_pad = static_cast<int>(next_power_of_two(static_cast<uint64_t>(current_m)));
+        m_pad     = rocsparse::max(m_pad, BLOCKDIM);
+
+        data.dl_pad[level] = reinterpret_cast<T*>(ptr);
+        ptr += align256<T>(m_pad);
+        data.d_pad[level] = reinterpret_cast<T*>(ptr);
+        ptr += align256<T>(m_pad);
+        data.du_pad[level] = reinterpret_cast<T*>(ptr);
+        ptr += align256<T>(m_pad);
+        data.B_pad[level] = reinterpret_cast<T*>(ptr);
+        ptr += align256<T>(m_pad * n);
+        data.w_pad[level] = reinterpret_cast<T*>(ptr);
+        ptr += align256<T>(m_pad);
+        data.v_pad[level] = reinterpret_cast<T*>(ptr);
+        ptr += align256<T>(m_pad);
+        data.mt_pad[level] = reinterpret_cast<T*>(ptr);
+        ptr += align256<T>(m_pad);
+
+        const int S_size = 2 * m_pad / BLOCKDIM;
+
+        data.sl[level] = reinterpret_cast<T*>(ptr);
+        ptr += align256<T>(S_size);
+        data.s[level] = reinterpret_cast<T*>(ptr);
+        ptr += align256<T>(S_size);
+        data.su[level] = reinterpret_cast<T*>(ptr);
+        ptr += align256<T>(S_size);
+        data.sB[level] = reinterpret_cast<T*>(ptr);
+        ptr += align256<T>(S_size * n);
+
+        current_m = S_size;
     }
 
-    // round up to next power of 2
-    gridsize = fnp2(gridsize);
+    RETURN_IF_ROCSPARSE_ERROR(gtsv_spike_solver_template<BLOCKDIM>(handle,
+                                                                   m,
+                                                                   n,
+                                                                   ldb,
+                                                                   dl, //lower_diag,
+                                                                   d, //main_diag,
+                                                                   du, //upper_diag,
+                                                                   B,
+                                                                   data.dl_pad, //lower_pad,
+                                                                   data.d_pad, //main_pad,
+                                                                   data.du_pad, //upper_pad,
+                                                                   data.B_pad,
+                                                                   data.w_pad,
+                                                                   data.v_pad,
+                                                                   data.mt_pad,
+                                                                   data.sl, //S_lower,
+                                                                   data.s, //S_main,
+                                                                   data.su, //S_upper,
+                                                                   data.sB,
+                                                                   0));
 
-    if(block_dim == 2)
-    {
-        RETURN_IF_ROCSPARSE_ERROR((rocsparse::gtsv_spike_solver_template<BLOCKSIZE, 2>(
-            handle, m, n, m_pad, gridsize, dl, d, du, B, ldb, temp_buffer)));
-        return rocsparse_status_success;
-    }
-    else if(block_dim == 4)
-    {
-        RETURN_IF_ROCSPARSE_ERROR((rocsparse::gtsv_spike_solver_template<BLOCKSIZE, 4>(
-            handle, m, n, m_pad, gridsize, dl, d, du, B, ldb, temp_buffer)));
-        return rocsparse_status_success;
-    }
-    else if(block_dim == 8)
-    {
-        RETURN_IF_ROCSPARSE_ERROR((rocsparse::gtsv_spike_solver_template<BLOCKSIZE, 8>(
-            handle, m, n, m_pad, gridsize, dl, d, du, B, ldb, temp_buffer)));
-        return rocsparse_status_success;
-    }
-    else if(block_dim == 16)
-    {
-        RETURN_IF_ROCSPARSE_ERROR((rocsparse::gtsv_spike_solver_template<BLOCKSIZE, 16>(
-            handle, m, n, m_pad, gridsize, dl, d, du, B, ldb, temp_buffer)));
-        return rocsparse_status_success;
-    }
-    else if(block_dim == 32)
-    {
-        RETURN_IF_ROCSPARSE_ERROR((rocsparse::gtsv_spike_solver_template<BLOCKSIZE, 32>(
-            handle, m, n, m_pad, gridsize, dl, d, du, B, ldb, temp_buffer)));
-        return rocsparse_status_success;
-    }
-    else if(block_dim == 64)
-    {
-        RETURN_IF_ROCSPARSE_ERROR((rocsparse::gtsv_spike_solver_template<BLOCKSIZE, 64>(
-            handle, m, n, m_pad, gridsize, dl, d, du, B, ldb, temp_buffer)));
-        return rocsparse_status_success;
-    }
-    else if(block_dim == 128)
-    {
-        RETURN_IF_ROCSPARSE_ERROR((rocsparse::gtsv_spike_solver_template<BLOCKSIZE, 128>(
-            handle, m, n, m_pad, gridsize, dl, d, du, B, ldb, temp_buffer)));
-        return rocsparse_status_success;
-    }
-    else if(block_dim == 256)
-    {
-        RETURN_IF_ROCSPARSE_ERROR((rocsparse::gtsv_spike_solver_template<BLOCKSIZE, 256>(
-            handle, m, n, m_pad, gridsize, dl, d, du, B, ldb, temp_buffer)));
-        return rocsparse_status_success;
-    }
-    else
-    {
-        RETURN_IF_ROCSPARSE_ERROR(rocsparse_status_not_implemented);
-    }
+    return rocsparse_status_success;
 }
 
 /*
