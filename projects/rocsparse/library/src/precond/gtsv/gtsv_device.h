@@ -328,10 +328,11 @@ namespace rocsparse
         return rocsparse::abs(bk) * sigma >= kappa * rocsparse::abs(ak_1 * ck);
     }
 
-    template <int WORDS>
-    struct PivotMask
+    template <int BLOCKDIM>
+    struct pivot_mask
     {
-        unsigned int bits[WORDS];
+        static constexpr int WORDS = (BLOCKDIM + 31) / 32;
+        unsigned int         bits[WORDS];
 
         // Sets bit k to 0 to record a 1x1 pivot at row k.
         __device__ __forceinline__ void set_pivoting_to_1x1(int k)
@@ -355,12 +356,13 @@ namespace rocsparse
     template <uint32_t BLOCKSIZE, uint32_t BLOCKDIM, typename T>
     ROCSPARSE_KERNEL(BLOCKSIZE)
     void LBMT_solve_wvmt_kernel(int m_pad,
-                                const T* __restrict__ lower,
-                                const T* __restrict__ main,
-                                const T* __restrict__ upper,
+                                T* __restrict__ lower,
+                                T* __restrict__ main,
+                                T* __restrict__ upper,
                                 T* __restrict__ w,
                                 T* __restrict__ v,
-                                T* __restrict__ mt)
+                                T* __restrict__ mt,
+                                pivot_mask<256>* pivot)
     {
         static_assert(BLOCKDIM >= 2);
 
@@ -376,9 +378,6 @@ namespace rocsparse
         }
 
         T bk = main[gid];
-
-        constexpr int               PIVOT_MASK_WORDS = (BLOCKDIM + 31) / 32;
-        PivotMask<PIVOT_MASK_WORDS> pivot_mask;
 
         w[gid]                            = lower[gid];
         v[gid + (BLOCKDIM - 1) * nblocks] = upper[gid + (BLOCKDIM - 1) * nblocks];
@@ -401,6 +400,8 @@ namespace rocsparse
             {
                 const T inv_bk = static_cast<T>(1) / bk;
 
+                main[nblocks * k + gid] = inv_bk;
+
                 T wk = w[nblocks * k + gid];
                 T vk = v[nblocks * k + gid];
 
@@ -408,7 +409,7 @@ namespace rocsparse
                 v[nblocks * k + gid]  = vk * inv_bk;
                 mt[nblocks * k + gid] = ck * inv_bk;
 
-                pivot_mask.set_pivoting_to_1x1(k);
+                pivot[gid].set_pivoting_to_1x1(k);
 
                 if(k < (BLOCKDIM - 1))
                 {
@@ -428,6 +429,15 @@ namespace rocsparse
             {
                 const T det = static_cast<T>(1) / (bk * bk_1 - ak_1 * ck);
 
+                main[nblocks * k + gid]  = bk_1 * det;
+                upper[nblocks * k + gid] = -ck * det;
+
+                if(k < (BLOCKDIM - 1))
+                {
+                    main[nblocks * (k + 1) + gid]  = bk * det;
+                    lower[nblocks * (k + 1) + gid] = -ak_1 * det;
+                }
+
                 T wk   = w[nblocks * k + gid];
                 T wk_1 = w[nblocks * (k + 1) + gid];
                 T vk   = v[nblocks * k + gid];
@@ -437,7 +447,7 @@ namespace rocsparse
                 v[nblocks * k + gid]  = (bk_1 * vk - ck * vk_1) * det;
                 mt[nblocks * k + gid] = -ck * ck_1 * det;
 
-                pivot_mask.set_pivoting_to2x2(k);
+                pivot[gid].set_pivoting_to2x2(k);
 
                 if(k < (BLOCKDIM - 1))
                 {
@@ -445,7 +455,7 @@ namespace rocsparse
                     v[nblocks * (k + 1) + gid]  = (-ak_1 * vk + bk * vk_1) * det;
                     mt[nblocks * (k + 1) + gid] = bk * ck_1 * det;
 
-                    pivot_mask.set_pivoting_to2x2(k + 1);
+                    pivot[gid].set_pivoting_to2x2(k + 1);
                 }
 
                 T bk_2 = static_cast<T>(0);
@@ -470,12 +480,12 @@ namespace rocsparse
         // at this point k = BLOCKDIM. Could just set k = BLOCKDIM - 1 here
         k--;
 
-        k -= pivot_mask.get_pivoting(k);
+        k -= pivot[gid].get_pivoting(k);
 
         // backward solve (M^T * w = w, M^T * v = v, and M^T * rhs = rhs)
         while(k >= 0)
         {
-            if(pivot_mask.get_pivoting(k) == 1)
+            if(pivot[gid].get_pivoting(k) == 1)
             {
                 const T tmp = mt[nblocks * k + gid];
 
@@ -499,7 +509,7 @@ namespace rocsparse
         }
     }
 
-    template <uint32_t BLOCKSIZE, uint32_t BLOCKDIM, typename T>
+    template <uint32_t BLOCKSIZE, uint32_t BLOCKDIM, uint32_t COLS, typename T>
     ROCSPARSE_KERNEL(BLOCKSIZE)
     void LBMT_solve_rhs_kernel(int m_pad,
                                int n,
@@ -507,7 +517,8 @@ namespace rocsparse
                                const T* __restrict__ main,
                                const T* __restrict__ upper,
                                const T* __restrict__ mt,
-                               T* __restrict__ rhs)
+                               T* __restrict__ rhs,
+                               const pivot_mask<256>* pivot)
     {
         static_assert(BLOCKDIM >= 2);
 
@@ -522,83 +533,68 @@ namespace rocsparse
             return;
         }
 
-        T bk = main[gid];
-
-        constexpr int               PIVOT_MASK_WORDS = (BLOCKDIM + 31) / 32;
-        PivotMask<PIVOT_MASK_WORDS> pivot_mask;
+        pivot_mask<256> p = pivot[gid];
 
         int k = 0;
         while(k < BLOCKDIM)
         {
-            T ck   = upper[nblocks * k + gid];
-            T ck_1 = (k < (BLOCKDIM - 1)) ? upper[nblocks * (k + 1) + gid] : static_cast<T>(0);
-            T bk_1 = (k < (BLOCKDIM - 1)) ? main[nblocks * (k + 1) + gid] : static_cast<T>(0);
-            T ak_1 = (k < (BLOCKDIM - 1)) ? lower[nblocks * (k + 1) + gid] : static_cast<T>(0);
-            T ak_2 = (k < (BLOCKDIM - 2)) ? lower[nblocks * (k + 2) + gid] : static_cast<T>(0);
-
-            // decide whether we should use 1x1 or 2x2 pivoting using Bunch-Kaufman
-            // pivoting criteria
-            const bool use_1x1_pivot = bunch_kaufman_criterion(ak_1, ak_2, bk, bk_1, ck, ck_1);
-
             // 1x1 pivoting
-            if(use_1x1_pivot || k == (BLOCKDIM - 1))
+            if(p.get_pivoting(k) == 1 || k == (BLOCKDIM - 1))
             {
-                const T inv_bk = static_cast<T>(1) / bk;
-
-                pivot_mask.set_pivoting_to_1x1(k);
+                const T ak_1
+                    = (k < (BLOCKDIM - 1)) ? lower[nblocks * (k + 1) + gid] : static_cast<T>(0);
+                const T inv_bk = main[nblocks * k + gid];
 
                 // L * B * x = y
-                T rhsk = rhs[nblocks * k + gid + m_pad * blockIdx.y] * inv_bk;
-
-                rhs[nblocks * k + gid + m_pad * blockIdx.y] = rhsk;
-
-                if(k < (BLOCKDIM - 1))
+                for(uint32_t i = 0; i < COLS; i++)
                 {
-                    rhs[nblocks * (k + 1) + gid + m_pad * blockIdx.y] += -(ak_1 * rhsk);
+                    const T rhsk = rhs[nblocks * k + gid + m_pad * (COLS * blockIdx.y + i)];
 
-                    bk_1 = bk_1 - ak_1 * ck * inv_bk;
+                    rhs[nblocks * k + gid + m_pad * (COLS * blockIdx.y + i)] = rhsk * inv_bk;
+
+                    if(k < (BLOCKDIM - 1))
+                    {
+                        rhs[nblocks * (k + 1) + gid + m_pad * (COLS * blockIdx.y + i)]
+                            += -(ak_1 * rhsk * inv_bk);
+                    }
                 }
-
-                bk = bk_1;
 
                 k += 1;
             }
             else
             {
-                const T det = static_cast<T>(1) / (bk * bk_1 - ak_1 * ck);
-
-                pivot_mask.set_pivoting_to2x2(k);
-
-                if(k < (BLOCKDIM - 1))
-                {
-                    pivot_mask.set_pivoting_to2x2(k + 1);
-                }
-
-                T bk_2 = static_cast<T>(0);
-
                 // |bk   ck  ||xk  |   |rhsk   |
                 // |ak_1 bk_1||xk_1| = |rhsk _1|
                 //
                 //inv = 1 / (bk * bk_1 - ak_1 * ck) |bk_1 -ck  |
                 //                                  |-ak_1  bk |
 
+                const T bk_1_det = main[nblocks * k + gid]; // stores bk_1 * det
+                const T bk_det   = main[nblocks * (k + 1) + gid]; // stores bk * det
+                const T ck_det   = upper[nblocks * k + gid]; // stores -ck * det
+                const T ak_1_det = lower[nblocks * (k + 1) + gid]; // stores = -ak_1 * det
+
+                const T ak_2
+                    = (k < (BLOCKDIM - 2)) ? lower[nblocks * (k + 2) + gid] : static_cast<T>(0);
+
                 // L * B * x = y
-                T rhsk   = rhs[nblocks * k + gid + m_pad * blockIdx.y] * det;
-                T rhsk_1 = rhs[nblocks * (k + 1) + gid + m_pad * blockIdx.y] * det;
-
-                rhs[nblocks * k + gid + m_pad * blockIdx.y]       = (bk_1 * rhsk - ck * rhsk_1);
-                rhs[nblocks * (k + 1) + gid + m_pad * blockIdx.y] = (-ak_1 * rhsk + bk * rhsk_1);
-
-                if(k < (BLOCKDIM - 2))
+                for(uint32_t i = 0; i < COLS; i++)
                 {
-                    rhs[nblocks * (k + 2) + gid + m_pad * blockIdx.y]
-                        += -(-ak_1 * ak_2 * rhsk + ak_2 * bk * rhsk_1);
+                    const T rhsk   = rhs[nblocks * k + gid + m_pad * (COLS * blockIdx.y + i)];
+                    const T rhsk_1 = rhs[nblocks * (k + 1) + gid + m_pad * (COLS * blockIdx.y + i)];
 
-                    bk_2 = main[nblocks * (k + 2) + gid];
-                    bk_2 = bk_2 - ak_2 * bk * ck_1 * det;
+                    rhs[nblocks * k + gid + m_pad * (COLS * blockIdx.y + i)]
+                        = (bk_1_det * rhsk + ck_det * rhsk_1);
+                    rhs[nblocks * (k + 1) + gid + m_pad * (COLS * blockIdx.y + i)]
+                        = (ak_1_det * rhsk + bk_det * rhsk_1);
+
+                    if(k < (BLOCKDIM - 2))
+                    {
+                        rhs[nblocks * (k + 2) + gid + m_pad * (COLS * blockIdx.y + i)]
+                            += -(ak_1_det * ak_2 * rhsk + ak_2 * bk_det * rhsk_1);
+                    }
                 }
 
-                bk = bk_2;
                 k += 2;
             }
         }
@@ -607,17 +603,20 @@ namespace rocsparse
         // at this point k = BLOCKDIM. Could just set k = BLOCKDIM - 1 here
         k--;
 
-        k -= pivot_mask.get_pivoting(k);
+        k -= p.get_pivoting(k);
 
         // backward solve (M^T * w = w, M^T * v = v, and M^T * rhs = rhs)
         while(k >= 0)
         {
-            if(pivot_mask.get_pivoting(k) == 1)
+            if(p.get_pivoting(k) == 1)
             {
                 const T tmp = mt[nblocks * k + gid];
 
-                rhs[nblocks * k + gid + m_pad * blockIdx.y]
-                    += -tmp * rhs[nblocks * (k + 1) + gid + m_pad * blockIdx.y];
+                for(uint32_t i = 0; i < COLS; i++)
+                {
+                    rhs[nblocks * k + gid + m_pad * (COLS * blockIdx.y + i)]
+                        += -tmp * rhs[nblocks * (k + 1) + gid + m_pad * (COLS * blockIdx.y + i)];
+                }
 
                 k -= 1;
             }
@@ -626,10 +625,13 @@ namespace rocsparse
                 const T tmp1 = mt[nblocks * k + gid];
                 const T tmp2 = mt[nblocks * (k - 1) + gid];
 
-                rhs[nblocks * k + gid + m_pad * blockIdx.y]
-                    += -tmp1 * rhs[nblocks * (k + 1) + gid + m_pad * blockIdx.y];
-                rhs[nblocks * (k - 1) + gid + m_pad * blockIdx.y]
-                    += -tmp2 * rhs[nblocks * (k + 1) + gid + m_pad * blockIdx.y];
+                for(uint32_t i = 0; i < COLS; i++)
+                {
+                    rhs[nblocks * k + gid + m_pad * (COLS * blockIdx.y + i)]
+                        += -tmp1 * rhs[nblocks * (k + 1) + gid + m_pad * (COLS * blockIdx.y + i)];
+                    rhs[nblocks * (k - 1) + gid + m_pad * (COLS * blockIdx.y + i)]
+                        += -tmp2 * rhs[nblocks * (k + 1) + gid + m_pad * (COLS * blockIdx.y + i)];
+                }
 
                 k -= 2;
             }
@@ -727,8 +729,7 @@ namespace rocsparse
 
         T mt[S_SIZE];
 
-        constexpr int               PIVOT_MASK_WORDS = (S_SIZE + 31) / 32;
-        PivotMask<PIVOT_MASK_WORDS> pivot_mask;
+        pivot_mask<S_SIZE> pivot;
 
         int k  = 0;
         T   bk = S_main[k];
@@ -752,7 +753,7 @@ namespace rocsparse
 
                 mt[k] = ck * inv_bk;
 
-                pivot_mask.set_pivoting_to_1x1(k);
+                pivot.set_pivoting_to_1x1(k);
 
                 // L * B * x = y
                 T rhsk = rhs[k + m * batch] * inv_bk;
@@ -776,13 +777,13 @@ namespace rocsparse
 
                 mt[k] = -ck * ck_1 * det;
 
-                pivot_mask.set_pivoting_to2x2(k);
+                pivot.set_pivoting_to2x2(k);
 
                 if(k < (S_SIZE - 1))
                 {
                     mt[k + 1] = bk * ck_1 * det;
 
-                    pivot_mask.set_pivoting_to2x2(k + 1);
+                    pivot.set_pivoting_to2x2(k + 1);
                 }
 
                 T bk_2 = static_cast<T>(0);
@@ -811,12 +812,12 @@ namespace rocsparse
         // at this point k = S_SIZE. Could just set k = S_SIZE - 1 here
         k--;
 
-        k -= pivot_mask.get_pivoting(k);
+        k -= pivot.get_pivoting(k);
 
         // backward solve (M^T * rhs = rhs)
         while(k >= 0)
         {
-            if(pivot_mask.get_pivoting(k) == 1)
+            if(pivot.get_pivoting(k) == 1)
             {
                 const T tmp = mt[k];
 
