@@ -79,9 +79,18 @@ int main()
         hipMemcpy(dcoo_col_ind, hcoo_col_ind.data(), sizeof(int) * nnz, hipMemcpyHostToDevice));
     HIP_CHECK(hipMemcpy(dcoo_val, hcoo_val.data(), sizeof(float) * nnz, hipMemcpyHostToDevice));
 
+    // Output arrays for the sorted matrix B
+    int*   dcoo_row_ind_B;
+    int*   dcoo_col_ind_B;
+    float* dcoo_val_B;
+    HIP_CHECK(hipMalloc(&dcoo_row_ind_B, sizeof(int) * nnz));
+    HIP_CHECK(hipMalloc(&dcoo_col_ind_B, sizeof(int) * nnz));
+    HIP_CHECK(hipMalloc(&dcoo_val_B, sizeof(float) * nnz));
+
     rocsparse_handle      handle;
     rocsparse_error       p_error[1] = {};
     rocsparse_spmat_descr matA;
+    rocsparse_spmat_descr matB;
 
     rocsparse_indextype  idx_type  = rocsparse_indextype_i32;
     rocsparse_datatype   data_type = rocsparse_datatype_f32_r;
@@ -92,6 +101,19 @@ int main()
     // Create sparse matrix A
     ROCSPARSE_CHECK(rocsparse_create_coo_descr(
         &matA, m, n, nnz, dcoo_row_ind, dcoo_col_ind, dcoo_val, idx_type, idx_base, data_type));
+
+    // Create sparse matrix B, which receives the sorted matrix A. Passing matA as the
+    // output instead would sort A in place.
+    ROCSPARSE_CHECK(rocsparse_create_coo_descr(&matB,
+                                               m,
+                                               n,
+                                               nnz,
+                                               dcoo_row_ind_B,
+                                               dcoo_col_ind_B,
+                                               dcoo_val_B,
+                                               idx_type,
+                                               idx_base,
+                                               data_type));
 
     rocsparse_spsort_descr spsort_descr;
     ROCSPARSE_CHECK(rocsparse_create_spsort_descr(&spsort_descr));
@@ -115,7 +137,7 @@ int main()
     // Call spsort to get buffer size
     size_t buffer_size;
     ROCSPARSE_CHECK(rocsparse_spsort_buffer_size(
-        handle, spsort_descr, matA, rocsparse_spsort_stage_analysis, &buffer_size, p_error));
+        handle, spsort_descr, matA, matB, rocsparse_spsort_stage_analysis, &buffer_size, p_error));
 
     std::cout << "buffer_size: " << buffer_size << std::endl;
 
@@ -124,12 +146,12 @@ int main()
 
     // Call spsort to perform analysis
     ROCSPARSE_CHECK(rocsparse_spsort(
-        handle, spsort_descr, matA, rocsparse_spsort_stage_analysis, buffer_size, buffer, p_error));
+        handle, spsort_descr, matA, matB, rocsparse_spsort_stage_analysis, buffer_size, buffer, p_error));
 
     HIP_CHECK(hipFree(buffer));
 
     ROCSPARSE_CHECK(rocsparse_spsort_buffer_size(
-        handle, spsort_descr, matA, rocsparse_spsort_stage_compute, &buffer_size, p_error));
+        handle, spsort_descr, matA, matB, rocsparse_spsort_stage_compute, &buffer_size, p_error));
 
     std::cout << "buffer_size: " << buffer_size << std::endl;
 
@@ -137,13 +159,13 @@ int main()
 
     // Call spsort to perform computation
     ROCSPARSE_CHECK(rocsparse_spsort(
-        handle, spsort_descr, matA, rocsparse_spsort_stage_compute, buffer_size, buffer, p_error));
+        handle, spsort_descr, matA, matB, rocsparse_spsort_stage_compute, buffer_size, buffer, p_error));
 
     HIP_CHECK(
-        hipMemcpy(hcoo_row_ind.data(), dcoo_row_ind, sizeof(int) * nnz, hipMemcpyDeviceToHost));
+        hipMemcpy(hcoo_row_ind.data(), dcoo_row_ind_B, sizeof(int) * nnz, hipMemcpyDeviceToHost));
     HIP_CHECK(
-        hipMemcpy(hcoo_col_ind.data(), dcoo_col_ind, sizeof(int) * nnz, hipMemcpyDeviceToHost));
-    HIP_CHECK(hipMemcpy(hcoo_val.data(), dcoo_val, sizeof(float) * nnz, hipMemcpyDeviceToHost));
+        hipMemcpy(hcoo_col_ind.data(), dcoo_col_ind_B, sizeof(int) * nnz, hipMemcpyDeviceToHost));
+    HIP_CHECK(hipMemcpy(hcoo_val.data(), dcoo_val_B, sizeof(float) * nnz, hipMemcpyDeviceToHost));
 
     std::cout << "hcoo_row_ind" << std::endl;
     for(size_t i = 0; i < hcoo_row_ind.size(); i++)
@@ -208,12 +230,16 @@ int main()
 
     // Clear rocSPARSE
     ROCSPARSE_CHECK(rocsparse_destroy_spmat_descr(matA));
+    ROCSPARSE_CHECK(rocsparse_destroy_spmat_descr(matB));
     ROCSPARSE_CHECK(rocsparse_destroy_handle(handle));
 
     // Clear device memory
     HIP_CHECK(hipFree(dcoo_row_ind));
     HIP_CHECK(hipFree(dcoo_col_ind));
     HIP_CHECK(hipFree(dcoo_val));
+    HIP_CHECK(hipFree(dcoo_row_ind_B));
+    HIP_CHECK(hipFree(dcoo_col_ind_B));
+    HIP_CHECK(hipFree(dcoo_val_B));
 
     return 0;
 }

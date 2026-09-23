@@ -108,26 +108,27 @@ void testing_spsort_coo_bad_arg(const Arguments& arg)
 
     // Pointer and enum checks, with dummy descriptors.
     {
-        rocsparse_spsort_descr descr   = (rocsparse_spsort_descr)0x4;
-        rocsparse_spmat_descr  mat     = (rocsparse_spmat_descr)0x4;
-        rocsparse_spsort_stage stage   = rocsparse_spsort_stage_analysis;
-        rocsparse_error*       p_error = nullptr;
+        rocsparse_spsort_descr      descr   = (rocsparse_spsort_descr)0x4;
+        rocsparse_const_spmat_descr mat_A   = (rocsparse_const_spmat_descr)0x4;
+        rocsparse_spmat_descr       mat_B   = (rocsparse_spmat_descr)0x4;
+        rocsparse_spsort_stage      stage   = rocsparse_spsort_stage_analysis;
+        rocsparse_error*            p_error = nullptr;
 
         {
             size_t* buffer_size = (size_t*)0x4;
-#define PARAMS_BUFFER_SIZE handle, descr, mat, stage, buffer_size, p_error
+#define PARAMS_BUFFER_SIZE handle, descr, mat_A, mat_B, stage, buffer_size, p_error
             static constexpr int nex     = 1;
-            static const int     ex[nex] = {5};
+            static const int     ex[nex] = {6};
             select_bad_arg_analysis(rocsparse_spsort_buffer_size, nex, ex, PARAMS_BUFFER_SIZE);
 #undef PARAMS_BUFFER_SIZE
         }
 
         {
             const size_t buffer_size = 10;
-            void*        buffer      = (void*)0x4;
-#define PARAMS handle, descr, mat, stage, buffer_size, buffer, p_error
+            void*        temp_buffer = (void*)0x4;
+#define PARAMS handle, descr, mat_A, mat_B, stage, buffer_size, temp_buffer, p_error
             static constexpr int nex     = 2;
-            static const int     ex[nex] = {4, 6};
+            static const int     ex[nex] = {5, 7};
             select_bad_arg_analysis(rocsparse_spsort, nex, ex, PARAMS);
 #undef PARAMS
         }
@@ -169,6 +170,71 @@ void testing_spsort_coo_bad_arg(const Arguments& arg)
 
         rocsparse_spsort_descr descr;
         CHECK_ROCSPARSE_ERROR(rocsparse_create_spsort_descr(&descr));
+        set_spsort_inputs(handle, descr, alg, dir);
+
+        // The output matrix must match the input matrix.
+        {
+            size_t buffer_size;
+            auto   expect_mismatch = [&](int64_t              m,
+                                       int64_t              n,
+                                       int64_t              nnz,
+                                       rocsparse_indextype  itype,
+                                       rocsparse_index_base base,
+                                       rocsparse_datatype   ttype,
+                                       rocsparse_status     status) {
+                rocsparse_local_spmat mat_B(m,
+                                            n,
+                                            nnz,
+                                            d_coo_row_ind,
+                                            d_coo_col_ind,
+                                            d_coo_val,
+                                            itype,
+                                            base,
+                                            ttype);
+                EXPECT_ROCSPARSE_STATUS(
+                    rocsparse_spsort_buffer_size(
+                        handle, descr, mat, mat_B, rocsparse_spsort_stage_analysis, &buffer_size, nullptr),
+                    status);
+                EXPECT_ROCSPARSE_STATUS(
+                    rocsparse_spsort(
+                        handle, descr, mat, mat_B, rocsparse_spsort_stage_analysis, 0, nullptr, nullptr),
+                    status);
+            };
+
+            const rocsparse_indextype other_itype
+                = (get_indextype<I>() == rocsparse_indextype_i32) ? rocsparse_indextype_i64
+                                                                  : rocsparse_indextype_i32;
+            const rocsparse_datatype other_ttype = (get_datatype<T>() == rocsparse_datatype_f32_r)
+                                                       ? rocsparse_datatype_f64_r
+                                                       : rocsparse_datatype_f32_r;
+
+            // clang-format off
+            expect_mismatch(safe_size - 1, safe_size, safe_size, get_indextype<I>(), rocsparse_index_base_zero, get_datatype<T>(), rocsparse_status_invalid_size);
+            expect_mismatch(safe_size, safe_size - 1, safe_size, get_indextype<I>(), rocsparse_index_base_zero, get_datatype<T>(), rocsparse_status_invalid_size);
+            expect_mismatch(safe_size, safe_size, safe_size - 1, get_indextype<I>(), rocsparse_index_base_zero, get_datatype<T>(), rocsparse_status_invalid_size);
+            expect_mismatch(safe_size, safe_size, safe_size, other_itype, rocsparse_index_base_zero, get_datatype<T>(), rocsparse_status_invalid_value);
+            expect_mismatch(safe_size, safe_size, safe_size, get_indextype<I>(), rocsparse_index_base_one, get_datatype<T>(), rocsparse_status_invalid_value);
+            expect_mismatch(safe_size, safe_size, safe_size, get_indextype<I>(), rocsparse_index_base_zero, other_ttype, rocsparse_status_invalid_value);
+            // clang-format on
+
+            rocsparse_local_spmat mat_B_csr(safe_size,
+                                            safe_size,
+                                            safe_size,
+                                            d_coo_row_ind,
+                                            d_coo_col_ind,
+                                            d_coo_val,
+                                            get_indextype<I>(),
+                                            get_indextype<I>(),
+                                            rocsparse_index_base_zero,
+                                            get_datatype<T>());
+            EXPECT_ROCSPARSE_STATUS(
+                rocsparse_spsort_buffer_size(
+                    handle, descr, mat, mat_B_csr, rocsparse_spsort_stage_analysis, &buffer_size, nullptr),
+                rocsparse_status_invalid_value);
+        }
+
+        CHECK_ROCSPARSE_ERROR(rocsparse_destroy_spsort_descr(descr));
+        CHECK_ROCSPARSE_ERROR(rocsparse_create_spsort_descr(&descr));
 
         // Wrong input sizes.
         EXPECT_ROCSPARSE_STATUS(
@@ -184,7 +250,7 @@ void testing_spsort_coo_bad_arg(const Arguments& arg)
         size_t buffer_size;
         EXPECT_ROCSPARSE_STATUS(
             rocsparse_spsort_buffer_size(
-                handle, descr, mat, rocsparse_spsort_stage_analysis, &buffer_size, nullptr),
+                handle, descr, mat, mat, rocsparse_spsort_stage_analysis, &buffer_size, nullptr),
             rocsparse_status_invalid_value);
 
         CHECK_ROCSPARSE_ERROR(rocsparse_spsort_set_input(
@@ -193,11 +259,11 @@ void testing_spsort_coo_bad_arg(const Arguments& arg)
         // The direction has not been set yet.
         EXPECT_ROCSPARSE_STATUS(
             rocsparse_spsort_buffer_size(
-                handle, descr, mat, rocsparse_spsort_stage_analysis, &buffer_size, nullptr),
+                handle, descr, mat, mat, rocsparse_spsort_stage_analysis, &buffer_size, nullptr),
             rocsparse_status_invalid_value);
         EXPECT_ROCSPARSE_STATUS(
             rocsparse_spsort(
-                handle, descr, mat, rocsparse_spsort_stage_analysis, 0, nullptr, nullptr),
+                handle, descr, mat, mat, rocsparse_spsort_stage_analysis, 0, nullptr, nullptr),
             rocsparse_status_invalid_value);
 
         // Invalid direction value.
@@ -216,20 +282,20 @@ void testing_spsort_coo_bad_arg(const Arguments& arg)
         // Compute cannot be executed before analysis.
         EXPECT_ROCSPARSE_STATUS(
             rocsparse_spsort(
-                handle, descr, mat, rocsparse_spsort_stage_compute, 0, nullptr, nullptr),
+                handle, descr, mat, mat, rocsparse_spsort_stage_compute, 0, nullptr, nullptr),
             rocsparse_status_invalid_value);
 
         CHECK_ROCSPARSE_ERROR(rocsparse_spsort_buffer_size(
-            handle, descr, mat, rocsparse_spsort_stage_analysis, &buffer_size, nullptr));
+            handle, descr, mat, mat, rocsparse_spsort_stage_analysis, &buffer_size, nullptr));
         void* dbuffer = nullptr;
         CHECK_HIP_ERROR(rocsparse_hipMalloc(&dbuffer, buffer_size));
         CHECK_ROCSPARSE_ERROR(rocsparse_spsort(
-            handle, descr, mat, rocsparse_spsort_stage_analysis, buffer_size, dbuffer, nullptr));
+            handle, descr, mat, mat, rocsparse_spsort_stage_analysis, buffer_size, dbuffer, nullptr));
 
         // Analysis cannot be executed twice.
         EXPECT_ROCSPARSE_STATUS(
             rocsparse_spsort(
-                handle, descr, mat, rocsparse_spsort_stage_analysis, buffer_size, dbuffer, nullptr),
+                handle, descr, mat, mat, rocsparse_spsort_stage_analysis, buffer_size, dbuffer, nullptr),
             rocsparse_status_invalid_value);
 
         // The algorithm cannot be changed after analysis.
@@ -272,7 +338,9 @@ void testing_spsort_coo(const Arguments& arg)
     host_shuffle_coo(hA);
 
     device_coo_matrix<T, I> dA(hA);
+    device_coo_matrix<T, I> dB(dA.m, dA.n, dA.nnz, dA.base);
     rocsparse_local_spmat   matA(dA);
+    rocsparse_local_spmat   matB(dB);
 
     rocsparse_spsort_descr descr;
     CHECK_ROCSPARSE_ERROR(rocsparse_create_spsort_descr(&descr));
@@ -281,24 +349,49 @@ void testing_spsort_coo(const Arguments& arg)
     // Analysis
     size_t buffer_size = 0;
     CHECK_ROCSPARSE_ERROR(rocsparse_spsort_buffer_size(
-        handle, descr, matA, rocsparse_spsort_stage_analysis, &buffer_size, nullptr));
+        handle, descr, matA, matB, rocsparse_spsort_stage_analysis, &buffer_size, nullptr));
 
     void* dbuffer = nullptr;
     CHECK_HIP_ERROR(rocsparse_hipMalloc(&dbuffer, buffer_size));
     CHECK_ROCSPARSE_ERROR(rocsparse_spsort(
-        handle, descr, matA, rocsparse_spsort_stage_analysis, buffer_size, dbuffer, nullptr));
+        handle, descr, matA, matB, rocsparse_spsort_stage_analysis, buffer_size, dbuffer, nullptr));
     CHECK_HIP_ERROR(rocsparse_hipFree(dbuffer));
     dbuffer = nullptr;
 
     // Compute
     CHECK_ROCSPARSE_ERROR(rocsparse_spsort_buffer_size(
-        handle, descr, matA, rocsparse_spsort_stage_compute, &buffer_size, nullptr));
+        handle, descr, matA, matB, rocsparse_spsort_stage_compute, &buffer_size, nullptr));
     CHECK_HIP_ERROR(rocsparse_hipMalloc(&dbuffer, buffer_size));
 
     if(arg.unit_check)
     {
+        // Out of place: B holds the sorted matrix and A is left unchanged.
         CHECK_ROCSPARSE_ERROR(rocsparse_spsort(
-            handle, descr, matA, rocsparse_spsort_stage_compute, buffer_size, dbuffer, nullptr));
+            handle, descr, matA, matB, rocsparse_spsort_stage_compute, buffer_size, dbuffer, nullptr));
+
+        hA_gold.unit_check(dB);
+        hA.unit_check(dA);
+
+        // In place: A is sorted into itself.
+        size_t in_place_buffer_size = 0;
+        CHECK_ROCSPARSE_ERROR(rocsparse_spsort_buffer_size(handle,
+                                                           descr,
+                                                           matA,
+                                                           matA,
+                                                           rocsparse_spsort_stage_compute,
+                                                           &in_place_buffer_size,
+                                                           nullptr));
+        void* in_place_dbuffer = nullptr;
+        CHECK_HIP_ERROR(rocsparse_hipMalloc(&in_place_dbuffer, in_place_buffer_size));
+        CHECK_ROCSPARSE_ERROR(rocsparse_spsort(handle,
+                                               descr,
+                                               matA,
+                                               matA,
+                                               rocsparse_spsort_stage_compute,
+                                               in_place_buffer_size,
+                                               in_place_dbuffer,
+                                               nullptr));
+        CHECK_HIP_ERROR(rocsparse_hipFree(in_place_dbuffer));
 
         hA_gold.unit_check(dA);
     }
@@ -310,7 +403,8 @@ void testing_spsort_coo(const Arguments& arg)
                                                rocsparse_spsort,
                                                handle,
                                                descr,
-                                               matA,
+                                               (rocsparse_const_spmat_descr)matA,
+                                               (rocsparse_spmat_descr)matB,
                                                rocsparse_spsort_stage_compute,
                                                buffer_size,
                                                dbuffer,

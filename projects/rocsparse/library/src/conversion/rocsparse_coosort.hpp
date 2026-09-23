@@ -75,18 +75,27 @@ namespace rocsparse
                                          const void*           coo_val,
                                          size_t*               buffer_size);
 
-    // Sorts the row indices, column indices and values of a COO matrix in place.
+    // Sorts the row indices, column indices and values of the COO matrix A into the COO
+    // matrix B. Each output array may either alias its input array, in which case it is
+    // sorted in place, or not overlap it at all. The index types and data types of A and B
+    // must be identical.
     rocsparse_status coosort(rocsparse_handle      handle,
                              rocsparse_coosort_alg alg,
                              rocsparse_direction   dir,
                              int64_t               m,
                              int64_t               n,
                              int64_t               nnz,
-                             rocsparse_indextype   coo_row_indextype,
-                             void*                 coo_row_ind,
-                             rocsparse_indextype   coo_col_indextype,
-                             void*                 coo_col_ind,
-                             rocsparse_datatype    coo_val_datatype,
-                             void*                 coo_val,
+                             rocsparse_indextype   coo_row_indextype_A,
+                             const void*           coo_row_ind_A,
+                             rocsparse_indextype   coo_col_indextype_A,
+                             const void*           coo_col_ind_A,
+                             rocsparse_datatype    coo_val_datatype_A,
+                             const void*           coo_val_A,
+                             rocsparse_indextype   coo_row_indextype_B,
+                             void*                 coo_row_ind_B,
+                             rocsparse_indextype   coo_col_indextype_B,
+                             void*                 coo_col_ind_B,
+                             rocsparse_datatype    coo_val_datatype_B,
+                             void*                 coo_val_B,
                              void*                 temp_buffer);
 }

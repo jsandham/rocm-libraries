@@ -123,28 +123,29 @@ int main()
                                                sizeof(spsort_direction),
                                                p_error));
 
+    // Passing matA as both the input and the output sorts it in place
     // Call spsort to get buffer size
     size_t buffer_size;
     ROCSPARSE_CHECK(rocsparse_spsort_buffer_size(
-        handle, spsort_descr, matA, rocsparse_spsort_stage_analysis, &buffer_size, p_error));
+        handle, spsort_descr, matA, matA, rocsparse_spsort_stage_analysis, &buffer_size, p_error));
 
     void* buffer;
     HIP_CHECK(hipMalloc(&buffer, buffer_size));
 
     // Call spsort to perform analysis
     ROCSPARSE_CHECK(rocsparse_spsort(
-        handle, spsort_descr, matA, rocsparse_spsort_stage_analysis, buffer_size, buffer, p_error));
+        handle, spsort_descr, matA, matA, rocsparse_spsort_stage_analysis, buffer_size, buffer, p_error));
 
     HIP_CHECK(hipFree(buffer));
 
     ROCSPARSE_CHECK(rocsparse_spsort_buffer_size(
-        handle, spsort_descr, matA, rocsparse_spsort_stage_compute, &buffer_size, p_error));
+        handle, spsort_descr, matA, matA, rocsparse_spsort_stage_compute, &buffer_size, p_error));
 
     HIP_CHECK(hipMalloc(&buffer, buffer_size));
 
     // Call spsort to perform computation
     ROCSPARSE_CHECK(rocsparse_spsort(
-        handle, spsort_descr, matA, rocsparse_spsort_stage_compute, buffer_size, buffer, p_error));
+        handle, spsort_descr, matA, matA, rocsparse_spsort_stage_compute, buffer_size, buffer, p_error));
 
     HIP_CHECK(hipFree(buffer));
 

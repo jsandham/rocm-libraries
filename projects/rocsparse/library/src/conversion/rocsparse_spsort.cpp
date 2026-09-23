@@ -221,11 +221,36 @@ catch(...)
 
 namespace rocsparse
 {
-    rocsparse_status spsort_buffer_size(rocsparse_handle       handle,
-                                        rocsparse_spsort_descr descr,
-                                        rocsparse_spmat_descr  mat,
-                                        rocsparse_spsort_stage stage,
-                                        size_t*                buffer_size)
+    // B receives the sorted A, so both must describe a matrix with the same shape and layout.
+    static rocsparse_status spsort_check_matrices(rocsparse_const_spmat_descr mat_A,
+                                                  rocsparse_spmat_descr       mat_B)
+    {
+        ROCSPARSE_CHECKARG(2, mat_A, (mat_A->batch_count != 1), rocsparse_status_not_implemented);
+        ROCSPARSE_CHECKARG(3, mat_B, (mat_B->batch_count != 1), rocsparse_status_not_implemented);
+
+        ROCSPARSE_CHECKARG(
+            3, mat_B, (mat_B->format != mat_A->format), rocsparse_status_invalid_value);
+        ROCSPARSE_CHECKARG(3,
+                           mat_B,
+                           (mat_B->rows != mat_A->rows || mat_B->cols != mat_A->cols
+                            || mat_B->nnz != mat_A->nnz),
+                           rocsparse_status_invalid_size);
+        ROCSPARSE_CHECKARG(3,
+                           mat_B,
+                           (mat_B->row_type != mat_A->row_type
+                            || mat_B->col_type != mat_A->col_type
+                            || mat_B->data_type != mat_A->data_type
+                            || mat_B->idx_base != mat_A->idx_base),
+                           rocsparse_status_invalid_value);
+
+        return rocsparse_status_success;
+    }
+
+    rocsparse_status spsort_buffer_size(rocsparse_handle            handle,
+                                        rocsparse_spsort_descr      descr,
+                                        rocsparse_const_spmat_descr mat,
+                                        rocsparse_spsort_stage      stage,
+                                        size_t*                     buffer_size)
     {
         ROCSPARSE_ROUTINE_TRACE;
 
@@ -300,16 +325,17 @@ namespace rocsparse
         RETURN_IF_ROCSPARSE_ERROR(rocsparse_status_invalid_value);
     }
 
-    rocsparse_status spsort(rocsparse_handle       handle,
-                            rocsparse_spsort_descr spsort_descr,
-                            rocsparse_spmat_descr  mat,
-                            rocsparse_spsort_stage stage,
-                            size_t                 buffer_size_in_bytes,
-                            void*                  buffer)
+    rocsparse_status spsort(rocsparse_handle            handle,
+                            rocsparse_spsort_descr      spsort_descr,
+                            rocsparse_const_spmat_descr mat_A,
+                            rocsparse_spmat_descr       mat_B,
+                            rocsparse_spsort_stage      stage,
+                            size_t                      buffer_size_in_bytes,
+                            void*                       buffer)
     {
         ROCSPARSE_ROUTINE_TRACE;
 
-        const rocsparse_format format = mat->format;
+        const rocsparse_format format = mat_A->format;
 
         const rocsparse_spsort_alg alg = spsort_descr->get_alg();
         const rocsparse_direction  dir = spsort_descr->get_dir();
@@ -351,15 +377,21 @@ namespace rocsparse
                 RETURN_IF_ROCSPARSE_ERROR((rocsparse::coosort(handle,
                                                               rocsparse_coosort_alg_default,
                                                               dir,
-                                                              mat->rows,
-                                                              mat->cols,
-                                                              mat->nnz,
-                                                              mat->row_type,
-                                                              mat->row_data,
-                                                              mat->col_type,
-                                                              mat->col_data,
-                                                              mat->data_type,
-                                                              mat->val_data,
+                                                              mat_A->rows,
+                                                              mat_A->cols,
+                                                              mat_A->nnz,
+                                                              mat_A->row_type,
+                                                              mat_A->const_row_data,
+                                                              mat_A->col_type,
+                                                              mat_A->const_col_data,
+                                                              mat_A->data_type,
+                                                              mat_A->const_val_data,
+                                                              mat_B->row_type,
+                                                              mat_B->row_data,
+                                                              mat_B->col_type,
+                                                              mat_B->col_data,
+                                                              mat_B->data_type,
+                                                              mat_B->val_data,
                                                               buffer)));
                 return rocsparse_status_success;
             }
@@ -397,23 +429,25 @@ namespace rocsparse
  *    C wrapper
  * ===========================================================================
  */
-extern "C" rocsparse_status rocsparse_spsort_buffer_size(rocsparse_handle       handle,
-                                                         rocsparse_spsort_descr descr,
-                                                         rocsparse_spmat_descr  mat,
-                                                         rocsparse_spsort_stage stage,
-                                                         size_t*                buffer_size,
-                                                         rocsparse_error*       error)
+extern "C" rocsparse_status rocsparse_spsort_buffer_size(rocsparse_handle            handle,
+                                                         rocsparse_spsort_descr      descr,
+                                                         rocsparse_const_spmat_descr mat_A,
+                                                         rocsparse_spmat_descr       mat_B,
+                                                         rocsparse_spsort_stage      stage,
+                                                         size_t*                     buffer_size,
+                                                         rocsparse_error*            error)
 try
 {
     ROCSPARSE_ROUTINE_TRACE;
 
     ROCSPARSE_CHECKARG_HANDLE(0, handle);
     ROCSPARSE_CHECKARG_POINTER(1, descr);
-    ROCSPARSE_CHECKARG_POINTER(2, mat);
-    ROCSPARSE_CHECKARG_ENUM(3, stage);
-    ROCSPARSE_CHECKARG_POINTER(4, buffer_size);
+    ROCSPARSE_CHECKARG_POINTER(2, mat_A);
+    ROCSPARSE_CHECKARG_POINTER(3, mat_B);
+    ROCSPARSE_CHECKARG_ENUM(4, stage);
+    ROCSPARSE_CHECKARG_POINTER(5, buffer_size);
 
-    ROCSPARSE_CHECKARG(2, mat, (mat->batch_count != 1), rocsparse_status_not_implemented);
+    RETURN_IF_ROCSPARSE_ERROR(rocsparse::spsort_check_matrices(mat_A, mat_B));
 
     // Validate spmv_inputs.
     ROCSPARSE_CHECKARG(1,
@@ -426,7 +460,7 @@ try
                        rocsparse_status_invalid_value);
 
     RETURN_IF_ROCSPARSE_ERROR(
-        rocsparse::spsort_buffer_size(handle, descr, mat, stage, buffer_size));
+        rocsparse::spsort_buffer_size(handle, descr, mat_A, stage, buffer_size));
 
     return rocsparse_status_success;
     // LCOV_EXCL_START
@@ -437,31 +471,33 @@ catch(...)
 }
 // LCOV_EXCL_STOP
 
-extern "C" rocsparse_status rocsparse_spsort(rocsparse_handle       handle, //0
-                                             rocsparse_spsort_descr descr, //1
-                                             rocsparse_spmat_descr  mat, //2
-                                             rocsparse_spsort_stage stage, // 3
-                                             size_t                 buffer_size_in_bytes, // 4
-                                             void*                  buffer, // 5
-                                             rocsparse_error*       p_error)
+extern "C" rocsparse_status rocsparse_spsort(rocsparse_handle            handle, //0
+                                             rocsparse_spsort_descr      descr, //1
+                                             rocsparse_const_spmat_descr mat_A, //2
+                                             rocsparse_spmat_descr       mat_B, //3
+                                             rocsparse_spsort_stage      stage, //4
+                                             size_t                      buffer_size, //5
+                                             void*                       temp_buffer, //6
+                                             rocsparse_error*            error)
 try
 {
     ROCSPARSE_ROUTINE_TRACE;
 
     ROCSPARSE_CHECKARG_HANDLE(0, handle);
     ROCSPARSE_CHECKARG_POINTER(1, descr);
-    ROCSPARSE_CHECKARG_POINTER(2, mat);
-    ROCSPARSE_CHECKARG_ENUM(3, stage);
-    ROCSPARSE_CHECKARG(4,
-                       buffer_size_in_bytes,
-                       (buffer_size_in_bytes == 0 && buffer != nullptr),
-                       rocsparse_status_invalid_size);
+    ROCSPARSE_CHECKARG_POINTER(2, mat_A);
+    ROCSPARSE_CHECKARG_POINTER(3, mat_B);
+    ROCSPARSE_CHECKARG_ENUM(4, stage);
     ROCSPARSE_CHECKARG(5,
-                       buffer,
-                       (buffer == nullptr && buffer_size_in_bytes > 0),
+                       buffer_size,
+                       (buffer_size == 0 && temp_buffer != nullptr),
+                       rocsparse_status_invalid_size);
+    ROCSPARSE_CHECKARG(6,
+                       temp_buffer,
+                       (temp_buffer == nullptr && buffer_size > 0),
                        rocsparse_status_invalid_pointer);
 
-    ROCSPARSE_CHECKARG(2, mat, (mat->batch_count != 1), rocsparse_status_not_implemented);
+    RETURN_IF_ROCSPARSE_ERROR(rocsparse::spsort_check_matrices(mat_A, mat_B));
 
     // Validate spmv_inputs.
     ROCSPARSE_CHECKARG(1,
@@ -509,7 +545,7 @@ try
     }
 
     RETURN_IF_ROCSPARSE_ERROR(
-        rocsparse::spsort(handle, descr, mat, stage, buffer_size_in_bytes, buffer));
+        rocsparse::spsort(handle, descr, mat_A, mat_B, stage, buffer_size, temp_buffer));
 
     // Record the stage that has been executed.
     descr->set_stage(stage);

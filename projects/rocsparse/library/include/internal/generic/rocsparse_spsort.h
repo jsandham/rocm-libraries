@@ -40,29 +40,41 @@ extern "C" {
 *  @param[in]
 *  descr        SpSort descriptor.
 *  @param[in]
-*  mat_A        sparse matrix \f$A\f$ descriptor.
+*  mat_A        sparse matrix \f$A\f$ descriptor, the matrix to sort.
+*  @param[in]
+*  mat_B        sparse matrix \f$B\f$ descriptor, the sorted output matrix. \p mat_B can be the same
+*               descriptor as \p mat_A to sort in place.
 *  @param[in]
 *  stage        SpSort stage for the SpSort computation.
-*  @param[out]  
-*  buffer_size  number of bytes of the temporary storage buffer. \p buffer_size is
-*               determined by calling \ref rocsparse_spsort_buffer_size.
+*  @param[out]
+*  buffer_size  number of bytes of the temporary storage buffer.
 *  @param[out]
 *  error        error descriptor created if the returned status is not \ref rocsparse_status_success. A null pointer can be passed if an error descriptor is not required.
 *
 *  \retval rocsparse_status_success the operation completed successfully.
 *  \retval rocsparse_status_invalid_handle the library context was not initialized.
-*  \retval rocsparse_status_invalid_pointer \p mat_A, \p descr, or \p buffer_size pointer is invalid.
+*  \retval rocsparse_status_invalid_pointer \p descr, \p mat_A, \p mat_B, or \p buffer_size pointer is invalid.
+*  \retval rocsparse_status_invalid_size \p mat_A and \p mat_B do not have the same dimensions or number of non-zeros.
+*  \retval rocsparse_status_invalid_value \p mat_A and \p mat_B do not have the same format, index types, data type or index base.
 */
 ROCSPARSE_EXPORT
-rocsparse_status rocsparse_spsort_buffer_size(rocsparse_handle       handle,
-                                              rocsparse_spsort_descr descr,
-                                              rocsparse_spmat_descr  mat,
-                                              rocsparse_spsort_stage stage,
-                                              size_t*                buffer_size,
-                                              rocsparse_error*       error);
+rocsparse_status rocsparse_spsort_buffer_size(rocsparse_handle            handle,
+                                              rocsparse_spsort_descr      descr,
+                                              rocsparse_const_spmat_descr mat_A,
+                                              rocsparse_spmat_descr       mat_B,
+                                              rocsparse_spsort_stage      stage,
+                                              size_t*                     buffer_size,
+                                              rocsparse_error*            error);
 
 /*! \ingroup generic_module
 *  \brief Sparse matrix sorting.
+*
+*  \details
+*  \p rocsparse_spsort sorts the sparse matrix \f$A\f$ and writes the result to the sparse matrix
+*  \f$B\f$. \f$A\f$ is left unchanged. \f$B\f$ must be created with the same format, dimensions,
+*  number of non-zeros, index types, data type and index base as \f$A\f$. If the same descriptor
+*  is passed for \p mat_A and \p mat_B, the matrix is sorted in place. Otherwise, the arrays of
+*  \f$B\f$ must not overlap the arrays of \f$A\f$.
 *
 *  \note
 *  This routine does not support execution in a hipGraph context.
@@ -72,10 +84,13 @@ rocsparse_status rocsparse_spsort_buffer_size(rocsparse_handle       handle,
 *  @param[in]
 *  descr        SpSort descriptor.
 *  @param[in]
-*  mat_A        sparse matrix \f$A\f$ descriptor.
+*  mat_A        sparse matrix \f$A\f$ descriptor, the matrix to sort.
+*  @param[inout]
+*  mat_B        sparse matrix \f$B\f$ descriptor, the sorted output matrix. \p mat_B can be the same
+*               descriptor as \p mat_A to sort in place.
 *  @param[in]
 *  stage        SpSort stage for the SpSort computation.
-*  @param[out]
+*  @param[in]
 *  buffer_size  number of bytes of the temporary storage buffer. \p buffer_size is
 *               determined by calling \ref rocsparse_spsort_buffer_size.
 *  @param[in]
@@ -85,7 +100,9 @@ rocsparse_status rocsparse_spsort_buffer_size(rocsparse_handle       handle,
 *
 *  \retval rocsparse_status_success the operation completed successfully.
 *  \retval rocsparse_status_invalid_handle the library context was not initialized.
-*  \retval rocsparse_status_invalid_pointer \p mat_A, \p descr, or \p buffer_size pointer is invalid.
+*  \retval rocsparse_status_invalid_pointer \p descr, \p mat_A, \p mat_B, or \p temp_buffer pointer is invalid.
+*  \retval rocsparse_status_invalid_size \p mat_A and \p mat_B do not have the same dimensions or number of non-zeros.
+*  \retval rocsparse_status_invalid_value \p mat_A and \p mat_B do not have the same format, index types, data type or index base.
 *
 *  \par Example
 *  \snippet example_rocsparse_spsort.cpp doc example
@@ -93,16 +110,17 @@ rocsparse_status rocsparse_spsort_buffer_size(rocsparse_handle       handle,
 *  \snippet example_rocsparse_spsort_coo.cpp doc example
 */
 ROCSPARSE_EXPORT
-rocsparse_status rocsparse_spsort(rocsparse_handle       handle,
-                                  rocsparse_spsort_descr descr,
-                                  rocsparse_spmat_descr  mat_A,
-                                  rocsparse_spsort_stage stage,
-                                  size_t                 buffer_size,
-                                  void*                  temp_buffer,
-                                  rocsparse_error*       error);
+rocsparse_status rocsparse_spsort(rocsparse_handle            handle,
+                                  rocsparse_spsort_descr      descr,
+                                  rocsparse_const_spmat_descr mat_A,
+                                  rocsparse_spmat_descr       mat_B,
+                                  rocsparse_spsort_stage      stage,
+                                  size_t                      buffer_size,
+                                  void*                       temp_buffer,
+                                  rocsparse_error*            error);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* ROCSPARSE_SPGEAM_H */
+#endif /* ROCSPARSE_SPSORT_H */
