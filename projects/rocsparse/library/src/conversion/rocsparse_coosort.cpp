@@ -23,8 +23,8 @@
  * ************************************************************************ */
 
 #include "rocsparse_coosort.hpp"
+#include "../level1/rocsparse_gthr.hpp"
 #include "rocsparse_gcreate_identity_permutation.hpp"
-#include "rocsparse_permute.hpp"
 #include "rocsparse_utility.hpp"
 
 #include <iostream>
@@ -218,11 +218,7 @@ namespace rocsparse
     // and the value permutation.
     static size_t coosort_perm_size(int64_t nnz, rocsparse_indextype perm_indextype)
     {
-        if(nnz == 0)
-        {
-            return 0;
-        }
-        return ((rocsparse::indextype_sizeof(perm_indextype) * nnz - 1) / 256 + 1) * 256;
+        return rocsparse::align_size<char>(rocsparse::indextype_sizeof(perm_indextype) * nnz);
     }
 }
 
@@ -242,24 +238,18 @@ rocsparse_status rocsparse::coosort_buffer_size(rocsparse_handle      handle,
 {
     ROCSPARSE_ROUTINE_TRACE;
 
-    if(nnz == 0)
-    {
-        *buffer_size = 0;
-        return rocsparse_status_success;
-    }
-
     rocsparse::coosort_buffer_size_t f;
     RETURN_IF_ROCSPARSE_ERROR(rocsparse::coosort_buffer_size_find(&f, coo_row_indextype));
 
     size_t sort_buffer_size = 0;
     RETURN_IF_ROCSPARSE_ERROR(f(handle, m, n, nnz, coo_row_ind, coo_col_ind, &sort_buffer_size));
 
-    size_t permute_buffer_size = 0;
-    RETURN_IF_ROCSPARSE_ERROR(rocsparse::permute_buffer_size(
-        handle, nnz, coo_val_datatype, coo_val, &permute_buffer_size));
+    // The sorted values are gathered into the scratch space before being copied back.
+    const size_t gather_buffer_size
+        = rocsparse::align_size<char>(rocsparse::datatype_sizeof(coo_val_datatype) * nnz);
 
     *buffer_size = rocsparse::coosort_perm_size(nnz, coo_row_indextype)
-                   + rocsparse::max(sort_buffer_size, permute_buffer_size);
+                   + rocsparse::max(sort_buffer_size, gather_buffer_size);
 
     return rocsparse_status_success;
 }
@@ -279,11 +269,6 @@ rocsparse_status rocsparse::coosort(rocsparse_handle      handle,
                                     void*                 temp_buffer)
 {
     ROCSPARSE_ROUTINE_TRACE;
-
-    if(nnz == 0)
-    {
-        return rocsparse_status_success;
-    }
 
     const rocsparse_indextype perm_indextype = coo_row_indextype;
 
@@ -323,8 +308,22 @@ rocsparse_status rocsparse::coosort(rocsparse_handle      handle,
         // LCOV_EXCL_STOP
     }
 
-    RETURN_IF_ROCSPARSE_ERROR(rocsparse::permute(
-        handle, nnz, coo_val_datatype, coo_val, perm_indextype, perm, sort_buffer));
+    void* sorted_val = sort_buffer;
+    RETURN_IF_ROCSPARSE_ERROR(rocsparse::gthr(handle,
+                                              nnz,
+                                              coo_val_datatype,
+                                              coo_val,
+                                              coo_val_datatype,
+                                              sorted_val,
+                                              perm_indextype,
+                                              perm,
+                                              rocsparse_index_base_zero));
+
+    RETURN_IF_HIP_ERROR(hipMemcpyAsync(coo_val,
+                                       sorted_val,
+                                       rocsparse::datatype_sizeof(coo_val_datatype) * nnz,
+                                       hipMemcpyDeviceToDevice,
+                                       handle->stream));
 
     return rocsparse_status_success;
 }

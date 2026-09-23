@@ -656,8 +656,6 @@ set(rocsparse_source
   src/conversion/rocsparse_internal_spmat_print.cpp
   #
   src/conversion/rocsparse_spsort.cpp
-  src/conversion/rocsparse_permute.cpp
-
 # Reordering
   src/reordering/rocsparse_csrcolor.cpp
 

@@ -148,20 +148,20 @@ rocsparse_status rocsparse::coosort_buffer_size_template(rocsparse_handle handle
                                                                           &buffer_size_by_col));
 
     // Use the maximum buffer size chosen between sorting by row or by column
-    *buffer_size = rocsparse::max(buffer_size_by_row, buffer_size_by_col);
-    *buffer_size = ((*buffer_size - 1) / 256 + 1) * 256;
+    *buffer_size
+        = rocsparse::align_size<char>(rocsparse::max(buffer_size_by_row, buffer_size_by_col));
 
     // rocPRIM does not support in-place sorting, so we need additional buffer
     // for all temporary arrays
 
     // rows buffer
-    *buffer_size += ((sizeof(J) * nnz - 1) / 256 + 1) * 256;
+    *buffer_size += rocsparse::align_size<J>(nnz);
     // columns buffer
-    *buffer_size += ((sizeof(J) * nnz - 1) / 256 + 1) * 256;
+    *buffer_size += rocsparse::align_size<J>(nnz);
     // perm buffer
-    *buffer_size += ((sizeof(J) * nnz - 1) / 256 + 1) * 256;
-    // segment buffer
-    *buffer_size += ((sizeof(J) * rocsparse::max(m, n)) / 256 + 1) * 256;
+    *buffer_size += rocsparse::align_size<J>(nnz);
+    // segment buffer, which holds max(m, n) + 1 segment offsets after the exclusive scan
+    *buffer_size += rocsparse::align_size<J>(rocsparse::max(m, n) + 1);
 
     return rocsparse_status_success;
 }
@@ -302,16 +302,16 @@ rocsparse_status rocsparse::coosort_by_row_template(rocsparse_handle handle,
 
     // Permutation vector given
     J* work1 = reinterpret_cast<J*>(ptr);
-    ptr += ((sizeof(J) * nnz - 1) / 256 + 1) * 256;
+    ptr += rocsparse::align_size<J>(nnz);
 
     J* work2 = reinterpret_cast<J*>(ptr);
-    ptr += ((sizeof(J) * nnz - 1) / 256 + 1) * 256;
+    ptr += rocsparse::align_size<J>(nnz);
 
     J* work3 = reinterpret_cast<J*>(ptr);
-    ptr += ((sizeof(J) * nnz - 1) / 256 + 1) * 256;
+    ptr += rocsparse::align_size<J>(nnz);
 
     J* work4 = reinterpret_cast<J*>(ptr);
-    ptr += ((sizeof(J) * rocsparse::max(m, n)) / 256 + 1) * 256;
+    ptr += rocsparse::align_size<J>(rocsparse::max(m, n) + 1);
 
     // Temporary rocprim buffer
     size_t size        = 0;
@@ -594,7 +594,6 @@ rocsparse_status rocsparse::coosort_by_column_template(rocsparse_handle handle,
                                                        void*            perm,
                                                        void*            temp_buffer)
 {
-    std::cout << "coosort_by_column_template" << std::endl;
     ROCSPARSE_ROUTINE_TRACE;
 
     RETURN_IF_ROCSPARSE_ERROR(rocsparse::coosort_by_row_template<J>(
