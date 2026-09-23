@@ -1,6 +1,6 @@
 /*! \file */
 /* ************************************************************************
- * Copyright (C) 2023-2025 Advanced Micro Devices, Inc. All rights Reserved.
+ * Copyright (C) 2023-2026 Advanced Micro Devices, Inc. All rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -28,31 +28,65 @@
 
 namespace rocsparse
 {
+    typedef enum rocsparse_coosort_alg_
+    {
+        rocsparse_coosort_alg_default = 0
+    } rocsparse_coosort_alg;
+
     template <typename J>
     rocsparse_status coosort_buffer_size_template(rocsparse_handle handle,
-                                                  J                m,
-                                                  J                n,
-                                                  J                nnz,
-                                                  const J*         coo_row_ind,
-                                                  const J*         coo_col_ind,
+                                                  int64_t          m,
+                                                  int64_t          n,
+                                                  int64_t          nnz,
+                                                  const void*      coo_row_ind,
+                                                  const void*      coo_col_ind,
                                                   size_t*          buffer_size);
     template <typename J>
     rocsparse_status coosort_by_row_template(rocsparse_handle handle,
-                                             J                m,
-                                             J                n,
-                                             J                nnz,
-                                             J*               coo_row_ind,
-                                             J*               coo_col_ind,
-                                             J*               perm,
+                                             int64_t          m,
+                                             int64_t          n,
+                                             int64_t          nnz,
+                                             void*            coo_row_ind,
+                                             void*            coo_col_ind,
+                                             void*            perm,
                                              void*            temp_buffer);
 
     template <typename J>
     rocsparse_status coosort_by_column_template(rocsparse_handle handle,
-                                                J                m,
-                                                J                n,
-                                                J                nnz,
-                                                J*               coo_row_ind,
-                                                J*               coo_col_ind,
-                                                J*               perm,
+                                                int64_t          m,
+                                                int64_t          n,
+                                                int64_t          nnz,
+                                                void*            coo_row_ind,
+                                                void*            coo_col_ind,
+                                                void*            perm,
                                                 void*            temp_buffer);
+
+    rocsparse_status coosort_buffer_size(rocsparse_handle      handle,
+                                         rocsparse_coosort_alg alg,
+                                         rocsparse_direction   dir,
+                                         int64_t               m,
+                                         int64_t               n,
+                                         int64_t               nnz,
+                                         rocsparse_indextype   coo_row_indextype,
+                                         const void*           coo_row_ind,
+                                         rocsparse_indextype   coo_col_indextype,
+                                         const void*           coo_col_ind,
+                                         rocsparse_datatype    coo_val_datatype,
+                                         const void*           coo_val,
+                                         size_t*               buffer_size);
+
+    // Sorts the row indices, column indices and values of a COO matrix in place.
+    rocsparse_status coosort(rocsparse_handle      handle,
+                             rocsparse_coosort_alg alg,
+                             rocsparse_direction   dir,
+                             int64_t               m,
+                             int64_t               n,
+                             int64_t               nnz,
+                             rocsparse_indextype   coo_row_indextype,
+                             void*                 coo_row_ind,
+                             rocsparse_indextype   coo_col_indextype,
+                             void*                 coo_col_ind,
+                             rocsparse_datatype    coo_val_datatype,
+                             void*                 coo_val,
+                             void*                 temp_buffer);
 }

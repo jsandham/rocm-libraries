@@ -616,6 +616,7 @@ set(rocsparse_source
   src/conversion/rocsparse_inverse_permutation.cpp
   src/conversion/rocsparse_csrsort.cpp
   src/conversion/rocsparse_cscsort.cpp
+  src/conversion/rocsparse_coosort_impl.cpp
   src/conversion/rocsparse_coosort.cpp
   src/conversion/rocsparse_sparse_to_dense.cpp
   src/conversion/rocsparse_dense_to_sparse.cpp
@@ -653,6 +654,9 @@ set(rocsparse_source
   src/conversion/rocsparse_sparse_to_csr_to_sparse.cpp
   src/conversion/rocsparse_spmat_transfer_from.cpp
   src/conversion/rocsparse_internal_spmat_print.cpp
+  #
+  src/conversion/rocsparse_spsort.cpp
+  src/conversion/rocsparse_permute.cpp
 
 # Reordering
   src/reordering/rocsparse_csrcolor.cpp
