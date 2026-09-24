@@ -54,8 +54,9 @@ extern "C" {
 *  \retval rocsparse_status_success the operation completed successfully.
 *  \retval rocsparse_status_invalid_handle the library context was not initialized.
 *  \retval rocsparse_status_invalid_pointer \p descr, \p mat_A, \p mat_B, or \p buffer_size pointer is invalid.
-*  \retval rocsparse_status_invalid_size \p mat_A and \p mat_B do not have the same dimensions or number of non-zeros.
-*  \retval rocsparse_status_invalid_value \p mat_A and \p mat_B do not have the same format, index types, data type or index base.
+*  \retval rocsparse_status_invalid_size \p mat_A and \p mat_B do not have the same dimensions or number of non-zeros, or a batch stride is smaller than the number of non-zeros.
+*  \retval rocsparse_status_invalid_value \p mat_A and \p mat_B do not have the same format, index types, data type, index base or batch count.
+*  \retval rocsparse_status_not_implemented \p mat_A is batched and not in COO format.
 */
 ROCSPARSE_EXPORT
 rocsparse_status rocsparse_spsort_buffer_size(rocsparse_handle            handle,
@@ -75,6 +76,11 @@ rocsparse_status rocsparse_spsort_buffer_size(rocsparse_handle            handle
 *  number of non-zeros, index types, data type and index base as \f$A\f$. If the same descriptor
 *  is passed for \p mat_A and \p mat_B, the matrix is sorted in place. Otherwise, the arrays of
 *  \f$B\f$ must not overlap the arrays of \f$A\f$.
+*
+*  Batched COO matrices, set up with \ref rocsparse_coo_set_strided_batch, are supported. Each
+*  batch is sorted independently. \f$A\f$ and \f$B\f$ must have the same batch count, and each
+*  batch stride must be at least the number of non-zeros so that batches do not overlap. The
+*  batch strides of \f$A\f$ and \f$B\f$ may differ.
 *
 *  \note
 *  This routine does not support execution in a hipGraph context.
@@ -101,8 +107,9 @@ rocsparse_status rocsparse_spsort_buffer_size(rocsparse_handle            handle
 *  \retval rocsparse_status_success the operation completed successfully.
 *  \retval rocsparse_status_invalid_handle the library context was not initialized.
 *  \retval rocsparse_status_invalid_pointer \p descr, \p mat_A, \p mat_B, or \p temp_buffer pointer is invalid.
-*  \retval rocsparse_status_invalid_size \p mat_A and \p mat_B do not have the same dimensions or number of non-zeros.
-*  \retval rocsparse_status_invalid_value \p mat_A and \p mat_B do not have the same format, index types, data type or index base.
+*  \retval rocsparse_status_invalid_size \p mat_A and \p mat_B do not have the same dimensions or number of non-zeros, or a batch stride is smaller than the number of non-zeros.
+*  \retval rocsparse_status_invalid_value \p mat_A and \p mat_B do not have the same format, index types, data type, index base or batch count.
+*  \retval rocsparse_status_not_implemented \p mat_A is batched and not in COO format.
 *
 *  \par Example
 *  \snippet example_rocsparse_spsort.cpp doc example

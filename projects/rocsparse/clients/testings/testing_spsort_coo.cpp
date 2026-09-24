@@ -231,6 +231,69 @@ void testing_spsort_coo_bad_arg(const Arguments& arg)
                 rocsparse_spsort_buffer_size(
                     handle, descr, mat, mat_B_csr, rocsparse_spsort_stage_analysis, &buffer_size, nullptr),
                 rocsparse_status_invalid_value);
+
+            auto expect_batch_status = [&](int64_t          batch_count_A,
+                                           int64_t          batch_stride_A,
+                                           int64_t          batch_count_B,
+                                           int64_t          batch_stride_B,
+                                           rocsparse_status status) {
+                rocsparse_local_spmat mat_A(safe_size,
+                                            safe_size,
+                                            safe_size,
+                                            d_coo_row_ind,
+                                            d_coo_col_ind,
+                                            d_coo_val,
+                                            get_indextype<I>(),
+                                            rocsparse_index_base_zero,
+                                            get_datatype<T>());
+                rocsparse_local_spmat mat_B(safe_size,
+                                            safe_size,
+                                            safe_size,
+                                            d_coo_row_ind,
+                                            d_coo_col_ind,
+                                            d_coo_val,
+                                            get_indextype<I>(),
+                                            rocsparse_index_base_zero,
+                                            get_datatype<T>());
+                CHECK_ROCSPARSE_ERROR(
+                    rocsparse_coo_set_strided_batch(mat_A, batch_count_A, batch_stride_A));
+                CHECK_ROCSPARSE_ERROR(
+                    rocsparse_coo_set_strided_batch(mat_B, batch_count_B, batch_stride_B));
+                EXPECT_ROCSPARSE_STATUS(
+                    rocsparse_spsort_buffer_size(
+                        handle, descr, mat_A, mat_B, rocsparse_spsort_stage_analysis, &buffer_size, nullptr),
+                    status);
+                EXPECT_ROCSPARSE_STATUS(
+                    rocsparse_spsort(
+                        handle, descr, mat_A, mat_B, rocsparse_spsort_stage_analysis, 0, nullptr, nullptr),
+                    status);
+            };
+
+            // Different batch counts.
+            expect_batch_status(1, 0, 2, safe_size, rocsparse_status_invalid_value);
+            expect_batch_status(2, safe_size, 3, safe_size, rocsparse_status_invalid_value);
+
+            // Batch strides that make the batches overlap.
+            expect_batch_status(2, safe_size - 1, 2, safe_size, rocsparse_status_invalid_size);
+            expect_batch_status(2, safe_size, 2, 0, rocsparse_status_invalid_size);
+
+            // Batching is only implemented for COO.
+            rocsparse_local_spmat mat_A_csr(safe_size,
+                                            safe_size,
+                                            safe_size,
+                                            d_coo_row_ind,
+                                            d_coo_col_ind,
+                                            d_coo_val,
+                                            get_indextype<I>(),
+                                            get_indextype<I>(),
+                                            rocsparse_index_base_zero,
+                                            get_datatype<T>());
+            CHECK_ROCSPARSE_ERROR(
+                rocsparse_csr_set_strided_batch(mat_A_csr, 2, safe_size + 1, safe_size));
+            EXPECT_ROCSPARSE_STATUS(
+                rocsparse_spsort_buffer_size(
+                    handle, descr, mat_A_csr, mat_A_csr, rocsparse_spsort_stage_analysis, &buffer_size, nullptr),
+                rocsparse_status_not_implemented);
         }
 
         CHECK_ROCSPARSE_ERROR(rocsparse_destroy_spsort_descr(descr));
@@ -324,23 +387,98 @@ void testing_spsort_coo(const Arguments& arg)
     rocsparse_direction  dir  = arg.direction;
     rocsparse_spsort_alg alg  = rocsparse_spsort_alg_default;
 
+    const int64_t batch_count = std::max<int64_t>(arg.batch_count, 1);
+
     rocsparse_local_handle handle(arg);
 
     rocsparse_matrix_factory<T, I, I> matrix_factory(arg);
 
-    host_coo_matrix<T, I> hA;
-    matrix_factory.init_coo(hA, M, N, base);
+    host_coo_matrix<T, I> hA_single;
+    matrix_factory.init_coo(hA_single, M, N, base);
 
-    host_coo_matrix<T, I> hA_gold(hA);
-    host_spsort_coo(dir, hA_gold);
+    const int64_t nnz = hA_single.nnz;
+
+    // A is padded between batches to check that its stride is honoured, B is packed.
+    const int64_t batch_stride_A = (batch_count > 1) ? nnz + 3 : 0;
+    const int64_t batch_stride_B = (batch_count > 1) ? nnz : 0;
+    const int64_t size_A         = (batch_count - 1) * batch_stride_A + nnz;
+    const int64_t size_B         = (batch_count - 1) * batch_stride_B + nnz;
+
+    // Every batch is a differently shuffled and scaled copy of the same matrix, so that a
+    // mix up between batches shows up in the result.
+    host_dense_vector<I> hA_row(size_A);
+    host_dense_vector<I> hA_col(size_A);
+    host_dense_vector<T> hA_val(size_A);
+    host_dense_vector<I> hB_row_gold(size_B);
+    host_dense_vector<I> hB_col_gold(size_B);
+    host_dense_vector<T> hB_val_gold(size_B);
+
+    std::fill(hA_row.data(), hA_row.data() + size_A, static_cast<I>(-1));
+    std::fill(hA_col.data(), hA_col.data() + size_A, static_cast<I>(-1));
+    std::fill(hA_val.data(), hA_val.data() + size_A, static_cast<T>(-1));
 
     rocsparse_seedrand();
-    host_shuffle_coo(hA);
+    for(int64_t batch = 0; batch < batch_count; ++batch)
+    {
+        host_coo_matrix<T, I> hA_batch(hA_single);
+        for(int64_t k = 0; k < nnz; ++k)
+        {
+            hA_batch.val[k] = hA_batch.val[k] * static_cast<T>(batch + 1);
+        }
 
-    device_coo_matrix<T, I> dA(hA);
-    device_coo_matrix<T, I> dB(dA.m, dA.n, dA.nnz, dA.base);
-    rocsparse_local_spmat   matA(dA);
-    rocsparse_local_spmat   matB(dB);
+        host_coo_matrix<T, I> hB_batch(hA_batch);
+        host_spsort_coo(dir, hB_batch);
+        host_shuffle_coo(hA_batch);
+
+        std::copy(hA_batch.row_ind.data(),
+                  hA_batch.row_ind.data() + nnz,
+                  hA_row.data() + batch * batch_stride_A);
+        std::copy(hA_batch.col_ind.data(),
+                  hA_batch.col_ind.data() + nnz,
+                  hA_col.data() + batch * batch_stride_A);
+        std::copy(
+            hA_batch.val.data(), hA_batch.val.data() + nnz, hA_val.data() + batch * batch_stride_A);
+        std::copy(hB_batch.row_ind.data(),
+                  hB_batch.row_ind.data() + nnz,
+                  hB_row_gold.data() + batch * batch_stride_B);
+        std::copy(hB_batch.col_ind.data(),
+                  hB_batch.col_ind.data() + nnz,
+                  hB_col_gold.data() + batch * batch_stride_B);
+        std::copy(hB_batch.val.data(),
+                  hB_batch.val.data() + nnz,
+                  hB_val_gold.data() + batch * batch_stride_B);
+    }
+
+    // The in place sort keeps the padding of A.
+    host_dense_vector<I> hA_row_gold(hA_row);
+    host_dense_vector<I> hA_col_gold(hA_col);
+    host_dense_vector<T> hA_val_gold(hA_val);
+    for(int64_t batch = 0; batch < batch_count; ++batch)
+    {
+        std::copy(hB_row_gold.data() + batch * batch_stride_B,
+                  hB_row_gold.data() + batch * batch_stride_B + nnz,
+                  hA_row_gold.data() + batch * batch_stride_A);
+        std::copy(hB_col_gold.data() + batch * batch_stride_B,
+                  hB_col_gold.data() + batch * batch_stride_B + nnz,
+                  hA_col_gold.data() + batch * batch_stride_A);
+        std::copy(hB_val_gold.data() + batch * batch_stride_B,
+                  hB_val_gold.data() + batch * batch_stride_B + nnz,
+                  hA_val_gold.data() + batch * batch_stride_A);
+    }
+
+    device_dense_vector<I> dA_row(hA_row);
+    device_dense_vector<I> dA_col(hA_col);
+    device_dense_vector<T> dA_val(hA_val);
+    device_dense_vector<I> dB_row(size_B);
+    device_dense_vector<I> dB_col(size_B);
+    device_dense_vector<T> dB_val(size_B);
+
+    rocsparse_local_spmat matA(
+        M, N, nnz, dA_row, dA_col, dA_val, get_indextype<I>(), base, get_datatype<T>());
+    rocsparse_local_spmat matB(
+        M, N, nnz, dB_row, dB_col, dB_val, get_indextype<I>(), base, get_datatype<T>());
+    CHECK_ROCSPARSE_ERROR(rocsparse_coo_set_strided_batch(matA, batch_count, batch_stride_A));
+    CHECK_ROCSPARSE_ERROR(rocsparse_coo_set_strided_batch(matB, batch_count, batch_stride_B));
 
     rocsparse_spsort_descr descr;
     CHECK_ROCSPARSE_ERROR(rocsparse_create_spsort_descr(&descr));
@@ -369,8 +507,12 @@ void testing_spsort_coo(const Arguments& arg)
         CHECK_ROCSPARSE_ERROR(rocsparse_spsort(
             handle, descr, matA, matB, rocsparse_spsort_stage_compute, buffer_size, dbuffer, nullptr));
 
-        hA_gold.unit_check(dB);
-        hA.unit_check(dA);
+        hB_row_gold.unit_check(dB_row);
+        hB_col_gold.unit_check(dB_col);
+        hB_val_gold.unit_check(dB_val);
+        hA_row.unit_check(dA_row);
+        hA_col.unit_check(dA_col);
+        hA_val.unit_check(dA_val);
 
         // In place: A is sorted into itself.
         size_t in_place_buffer_size = 0;
@@ -393,7 +535,9 @@ void testing_spsort_coo(const Arguments& arg)
                                                nullptr));
         CHECK_HIP_ERROR(rocsparse_hipFree(in_place_dbuffer));
 
-        hA_gold.unit_check(dA);
+        hA_row_gold.unit_check(dA_row);
+        hA_col_gold.unit_check(dA_col);
+        hA_val_gold.unit_check(dA_val);
     }
 
     if(arg.timing)
@@ -410,7 +554,7 @@ void testing_spsort_coo(const Arguments& arg)
                                                dbuffer,
                                                nullptr);
 
-        const double gbyte_count = spsort_coo_gbyte_count<I, T>(dA.nnz);
+        const double gbyte_count = batch_count * spsort_coo_gbyte_count<I, T>(nnz);
         const double gpu_gbyte   = get_gpu_gbyte(gpu_time_used, gbyte_count);
 
         display_timing_info(display_key_t::M,
@@ -418,7 +562,9 @@ void testing_spsort_coo(const Arguments& arg)
                             display_key_t::N,
                             N,
                             display_key_t::nnz,
-                            dA.nnz,
+                            nnz,
+                            display_key_t::batch_count,
+                            batch_count,
                             display_key_t::dir,
                             rocsparse_direction2string(dir),
                             display_key_t::bandwidth,

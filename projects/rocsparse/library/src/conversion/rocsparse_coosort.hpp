@@ -67,30 +67,41 @@ namespace rocsparse
                                          int64_t               m,
                                          int64_t               n,
                                          int64_t               nnz,
-                                         rocsparse_indextype   coo_row_indextype,
-                                         const void*           coo_row_ind,
-                                         rocsparse_indextype   coo_col_indextype,
-                                         const void*           coo_col_ind,
-                                         rocsparse_datatype    coo_val_datatype,
-                                         const void*           coo_val,
+                                         rocsparse_indextype   coo_row_indextype_A,
+                                         const void*           coo_row_ind_A,
+                                         rocsparse_indextype   coo_col_indextype_A,
+                                         const void*           coo_col_ind_A,
+                                         rocsparse_datatype    coo_val_datatype_A,
+                                         const void*           coo_val_A,
+                                         rocsparse_indextype   coo_row_indextype_B,
+                                         const void*           coo_row_ind_B,
+                                         rocsparse_indextype   coo_col_indextype_B,
+                                         const void*           coo_col_ind_B,
+                                         rocsparse_datatype    coo_val_datatype_B,
+                                         const void*           coo_val_B,
                                          size_t*               buffer_size);
 
     // Sorts the row indices, column indices and values of the COO matrix A into the COO
     // matrix B. Each output array may either alias its input array, in which case it is
     // sorted in place, or not overlap it at all. The index types and data types of A and B
-    // must be identical.
+    // must be identical. Each of the batch_count matrices is sorted independently, with the
+    // batch strides given in number of elements.
     rocsparse_status coosort(rocsparse_handle      handle,
                              rocsparse_coosort_alg alg,
                              rocsparse_direction   dir,
                              int64_t               m,
                              int64_t               n,
                              int64_t               nnz,
+                             int64_t               batch_count_A,
+                             int64_t               batch_stride_A,
                              rocsparse_indextype   coo_row_indextype_A,
                              const void*           coo_row_ind_A,
                              rocsparse_indextype   coo_col_indextype_A,
                              const void*           coo_col_ind_A,
                              rocsparse_datatype    coo_val_datatype_A,
                              const void*           coo_val_A,
+                             int64_t               batch_count_B,
+                             int64_t               batch_stride_B,
                              rocsparse_indextype   coo_row_indextype_B,
                              void*                 coo_row_ind_B,
                              rocsparse_indextype   coo_col_indextype_B,

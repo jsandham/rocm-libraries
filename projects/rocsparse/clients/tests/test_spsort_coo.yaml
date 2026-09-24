@@ -32,6 +32,9 @@ Tests:
   indextype: *i32_i64
   precision: *single_double_precisions_complex_real
 
+#
+# quick
+#
 - name: spsort_coo
   category: quick
   function: spsort_coo
@@ -39,7 +42,7 @@ Tests:
   precision: *single_double_precisions
   M: [10]
   N: [33]
-  baseA: *all_rocsparse_index_base
+  baseA: [rocsparse_index_base_zero]
   direction: *all_rocsparse_direction
   matrix: [rocsparse_matrix_zero]
 
@@ -48,35 +51,105 @@ Tests:
   function: spsort_coo
   indextype: *i32_i64
   precision: *single_double_precisions
-  M: [1, 10, 300]
-  N: [1, 33, 242]
+  M: [300]
+  N: [242]
   baseA: *all_rocsparse_index_base
   direction: *all_rocsparse_direction
   matrix: [rocsparse_matrix_random]
+
+- name: spsort_coo
+  category: quick
+  function: spsort_coo
+  indextype: *i32
+  precision: *single_only_precisions
+  M: [1]
+  N: [1, 242]
+  baseA: [rocsparse_index_base_zero]
+  direction: *all_rocsparse_direction
+  matrix: [rocsparse_matrix_random]
+
+- name: spsort_coo_batched
+  category: quick
+  function: spsort_coo
+  indextype: *i32_i64
+  precision: *single_double_precisions
+  M: [10]
+  N: [33]
+  batch_count: [2]
+  baseA: [rocsparse_index_base_one]
+  direction: *all_rocsparse_direction
+  matrix: [rocsparse_matrix_random]
+
+- name: spsort_coo_batched
+  category: quick
+  function: spsort_coo
+  indextype: *i32
+  precision: *single_only_precisions
+  M: [10]
+  N: [33]
+  batch_count: [2]
+  baseA: [rocsparse_index_base_zero]
+  direction: *all_rocsparse_direction
+  matrix: [rocsparse_matrix_zero]
 
 - name: spsort_coo_file
   category: quick
   function: spsort_coo
   indextype: *i32
-  precision: *single_double_precisions
+  precision: *double_only_precisions
   M: 1
   N: 1
   baseA: [rocsparse_index_base_zero]
   direction: *all_rocsparse_direction
   matrix: [rocsparse_matrix_file_rocalution]
-  filename: [nos1,
-             nos3,
-             nos5,
-             nos7]
+  filename: [nos1]
+
+#
+# pre_checkin
+#
+- name: spsort_coo
+  category: pre_checkin
+  function: spsort_coo
+  indextype: *i32_i64
+  precision: *single_double_precisions_complex_real
+  M: [2000]
+  N: [1623]
+  baseA: *all_rocsparse_index_base
+  direction: *all_rocsparse_direction
+  matrix: [rocsparse_matrix_random]
 
 - name: spsort_coo
   category: pre_checkin
   function: spsort_coo
   indextype: *i32_i64
   precision: *single_double_precisions_complex_real
-  M: [8, 2000]
-  N: [8, 1623]
+  M: [8]
+  N: [1623]
+  baseA: [rocsparse_index_base_zero]
+  direction: *all_rocsparse_direction
+  matrix: [rocsparse_matrix_random]
+
+- name: spsort_coo_batched
+  category: pre_checkin
+  function: spsort_coo
+  indextype: *i32_i64
+  precision: *single_double_precisions_complex_real
+  M: [2000]
+  N: [1623]
+  batch_count: [2]
   baseA: *all_rocsparse_index_base
+  direction: *all_rocsparse_direction
+  matrix: [rocsparse_matrix_random]
+
+- name: spsort_coo_batched
+  category: pre_checkin
+  function: spsort_coo
+  indextype: *i32_i64
+  precision: *single_double_precisions
+  M: [2000]
+  N: [1623]
+  batch_count: [17]
+  baseA: [rocsparse_index_base_zero]
   direction: *all_rocsparse_direction
   matrix: [rocsparse_matrix_random]
 
@@ -84,21 +157,7 @@ Tests:
   category: pre_checkin
   function: spsort_coo
   indextype: *i32_i64
-  precision: *single_double_precisions
-  M: 1
-  N: 1
-  baseA: [rocsparse_index_base_one]
-  direction: *all_rocsparse_direction
-  matrix: [rocsparse_matrix_file_rocalution]
-  filename: [rma10,
-             mc2depi,
-             ASIC_320k]
-
-- name: spsort_coo_file
-  category: pre_checkin
-  function: spsort_coo
-  indextype: *i32_i64
-  precision: *single_double_precisions_complex
+  precision: *double_only_precisions_complex
   M: 1
   N: 1
   baseA: [rocsparse_index_base_one]
@@ -106,6 +165,21 @@ Tests:
   matrix: [rocsparse_matrix_file_rocalution]
   filename: [Chevron2]
 
+- name: spsort_coo_file
+  category: pre_checkin
+  function: spsort_coo
+  indextype: *i64
+  precision: *double_only_precisions
+  M: 1
+  N: 1
+  baseA: [rocsparse_index_base_one]
+  direction: *all_rocsparse_direction
+  matrix: [rocsparse_matrix_file_rocalution]
+  filename: [rma10]
+
+#
+# nightly
+#
 - name: spsort_coo
   category: nightly
   function: spsort_coo
@@ -117,11 +191,48 @@ Tests:
   direction: *all_rocsparse_direction
   matrix: [rocsparse_matrix_random]
 
+- name: spsort_coo_batched
+  category: nightly
+  function: spsort_coo
+  indextype: *i32_i64
+  precision: *single_double_precisions_complex_real
+  M: [159382]
+  N: [82940]
+  batch_count: [2]
+  baseA: [rocsparse_index_base_zero]
+  direction: *all_rocsparse_direction
+  matrix: [rocsparse_matrix_random]
+
+- name: spsort_coo_batched
+  category: nightly
+  function: spsort_coo
+  indextype: *i32_i64
+  precision: *single_double_precisions_complex_real
+  M: [29593, 159382]
+  N: [9173, 82940]
+  batch_count: [4]
+  baseA: [rocsparse_index_base_zero]
+  direction: *all_rocsparse_direction
+  matrix: [rocsparse_matrix_random]
+
+- name: spsort_coo_file
+  category: nightly
+  function: spsort_coo
+  indextype: *i32
+  precision: *double_only_precisions
+  M: 1
+  N: 1
+  baseA: [rocsparse_index_base_one]
+  direction: *all_rocsparse_direction
+  matrix: [rocsparse_matrix_file_rocalution]
+  filename: [mc2depi,
+             ASIC_320k]
+
 - name: spsort_coo_file
   category: nightly
   function: spsort_coo
   indextype: *i32_i64
-  precision: *single_double_precisions_complex
+  precision: *double_only_precisions_complex
   M: 1
   N: 1
   baseA: [rocsparse_index_base_zero]
