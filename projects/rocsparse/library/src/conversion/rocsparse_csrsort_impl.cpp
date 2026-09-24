@@ -26,8 +26,191 @@
 
 #include "csrsort_device.h"
 #include "rocsparse_control.hpp"
-
+#include "rocsparse_csrsort.hpp"
 #include "rocsparse_primitives.hpp"
+
+namespace rocsparse
+{
+    // Number of bits needed to represent the column indices, which are at most n.
+    static uint32_t csrsort_endbit(int64_t n)
+    {
+        // __builtin_clzll is undefined for n == 0
+        return (n == 0) ? 0 : 64 - __builtin_clzll(static_cast<unsigned long long>(n));
+    }
+}
+
+template <typename I, typename J>
+rocsparse_status rocsparse::csrsort_buffer_size_template(rocsparse_handle handle,
+                                                         int64_t          m,
+                                                         int64_t          n,
+                                                         int64_t          nnz,
+                                                         const void*      csr_row_ptr,
+                                                         const void*      csr_col_ind,
+                                                         size_t*          buffer_size)
+{
+    ROCSPARSE_ROUTINE_TRACE;
+
+    if(m == 0 || n == 0 || nnz == 0)
+    {
+        *buffer_size = 0;
+        return rocsparse_status_success;
+    }
+
+    const uint32_t startbit = 0;
+    const uint32_t endbit   = rocsparse::csrsort_endbit(n);
+
+    // We do not know if sort_pairs or sort_keys will be called, so use the largest buffer between the two
+    size_t size1;
+    size_t size2;
+    RETURN_IF_ROCSPARSE_ERROR(
+        (rocsparse::primitives::segmented_radix_sort_pairs_buffer_size<J, I, I>(
+            handle, nnz, m, startbit, endbit, &size1)));
+    RETURN_IF_ROCSPARSE_ERROR((rocsparse::primitives::segmented_radix_sort_keys_buffer_size<J, I>(
+        handle, nnz, m, startbit, endbit, &size2)));
+
+    *buffer_size = rocsparse::align_size<char>(rocsparse::max(size1, size2));
+
+    // rocPRIM does not support in-place sorting, so we need additional buffer
+    // for all temporary arrays
+
+    // columns buffer
+    *buffer_size += rocsparse::align_size<J>(nnz);
+    // perm buffer
+    *buffer_size += rocsparse::align_size<I>(nnz);
+    // segm buffer
+    *buffer_size += rocsparse::align_size<I>(m + 1);
+
+    return rocsparse_status_success;
+}
+
+template <typename I, typename J>
+rocsparse_status rocsparse::csrsort_template(rocsparse_handle     handle,
+                                             int64_t              m,
+                                             int64_t              n,
+                                             int64_t              nnz,
+                                             rocsparse_index_base idx_base,
+                                             const void*          csr_row_ptr,
+                                             void*                csr_col_ind,
+                                             void*                perm,
+                                             void*                temp_buffer)
+{
+    ROCSPARSE_ROUTINE_TRACE;
+
+    // Quick return if possible
+    if(m == 0 || n == 0 || nnz == 0)
+    {
+        return rocsparse_status_success;
+    }
+
+    const I* csr_row_ptr_ = reinterpret_cast<const I*>(csr_row_ptr);
+    J*       csr_col_ind_ = reinterpret_cast<J*>(csr_col_ind);
+    I*       perm_        = reinterpret_cast<I*>(perm);
+
+    // Stream
+    hipStream_t stream = handle->stream;
+
+    const uint32_t startbit = 0;
+    const uint32_t endbit   = rocsparse::csrsort_endbit(n);
+    size_t         size;
+
+    if(perm_ != nullptr)
+    {
+        // Sort pairs, if permutation vector is present
+        RETURN_IF_ROCSPARSE_ERROR(
+            (rocsparse::primitives::segmented_radix_sort_pairs_buffer_size<J, I, I>(
+                handle, nnz, m, startbit, endbit, &size)));
+    }
+    else
+    {
+        // Sort keys, if no permutation vector is present
+        RETURN_IF_ROCSPARSE_ERROR(
+            (rocsparse::primitives::segmented_radix_sort_keys_buffer_size<J, I>(
+                handle, nnz, m, startbit, endbit, &size)));
+    }
+
+    // Temporary buffer entry points
+    char* ptr = reinterpret_cast<char*>(temp_buffer);
+
+    // columns buffer
+    J* tmp_cols = reinterpret_cast<J*>(ptr);
+    ptr += rocsparse::align_size<J>(nnz);
+
+    // perm buffer
+    I* tmp_perm = reinterpret_cast<I*>(ptr);
+    ptr += rocsparse::align_size<I>(nnz);
+
+    // segm buffer
+    I* tmp_segm = reinterpret_cast<I*>(ptr);
+    ptr += rocsparse::align_size<I>(m + 1);
+
+    // Index base one requires shift of offset positions
+    if(idx_base == rocsparse_index_base_one)
+    {
+#define CSRSORT_DIM 512
+        dim3 csrsort_blocks((m + 1 - 1) / CSRSORT_DIM + 1);
+        dim3 csrsort_threads(CSRSORT_DIM);
+
+        RETURN_IF_HIPLAUNCHKERNELGGL_ERROR((rocsparse::csrsort_shift_kernel<CSRSORT_DIM>),
+                                           csrsort_blocks,
+                                           csrsort_threads,
+                                           0,
+                                           stream,
+                                           m + 1,
+                                           csr_row_ptr_,
+                                           tmp_segm);
+#undef CSRSORT_DIM
+    }
+
+    // rocprim buffer
+    void* tmp_rocprim = reinterpret_cast<void*>(ptr);
+
+    // Switch between offsets
+    const I* offsets = (idx_base == rocsparse_index_base_one) ? tmp_segm : csr_row_ptr_;
+
+    // Sort by columns and obtain permutation vector
+
+    if(perm_ != nullptr)
+    {
+        // Sort by pairs, if permutation vector is present
+        rocsparse::primitives::double_buffer<J> keys(csr_col_ind_, tmp_cols);
+        rocsparse::primitives::double_buffer<I> vals(perm_, tmp_perm);
+
+        RETURN_IF_ROCSPARSE_ERROR(rocsparse::primitives::segmented_radix_sort_pairs(
+            handle, keys, vals, nnz, m, offsets, offsets + 1, startbit, endbit, size, tmp_rocprim));
+
+        if(keys.current() != csr_col_ind_)
+        {
+            RETURN_IF_HIP_ERROR(rocsparse_hipMemcpyAsync(csr_col_ind_,
+                                                         keys.current(),
+                                                         sizeof(J) * nnz,
+                                                         hipMemcpyDeviceToDevice,
+                                                         stream));
+        }
+        if(vals.current() != perm_)
+        {
+            RETURN_IF_HIP_ERROR(rocsparse_hipMemcpyAsync(
+                perm_, vals.current(), sizeof(I) * nnz, hipMemcpyDeviceToDevice, stream));
+        }
+    }
+    else
+    {
+        // Sort by keys, if no permutation vector is present
+        rocsparse::primitives::double_buffer<J> keys(csr_col_ind_, tmp_cols);
+
+        RETURN_IF_ROCSPARSE_ERROR(rocsparse::primitives::segmented_radix_sort_keys(
+            handle, keys, nnz, m, offsets, offsets + 1, startbit, endbit, size, tmp_rocprim));
+
+        if(keys.current() != csr_col_ind_)
+        {
+            RETURN_IF_HIP_ERROR(rocsparse_hipMemcpyAsync(csr_col_ind_,
+                                                         keys.current(),
+                                                         sizeof(J) * nnz,
+                                                         hipMemcpyDeviceToDevice,
+                                                         stream));
+        }
+    }
+    return rocsparse_status_success;
+}
 
 extern "C" rocsparse_status rocsparse_csrsort_buffer_size(rocsparse_handle     handle,
                                                           rocsparse_int        m,
@@ -58,39 +241,8 @@ try
     ROCSPARSE_CHECKARG_ARRAY(5, nnz, csr_col_ind);
     ROCSPARSE_CHECKARG_POINTER(6, buffer_size);
 
-    if(m == 0 || n == 0 || nnz == 0)
-    {
-        *buffer_size = 0;
-        return rocsparse_status_success;
-    }
-
-    uint32_t startbit = 0;
-    uint32_t endbit   = rocsparse::clz(n);
-
-    // We do not know if sort_pairs or sort_keys will be called, so use the largest buffer between the two
-    size_t size1;
-    size_t size2;
-    RETURN_IF_ROCSPARSE_ERROR(
-        (rocsparse::primitives::
-             segmented_radix_sort_pairs_buffer_size<rocsparse_int, rocsparse_int, rocsparse_int>(
-                 handle, nnz, m, startbit, endbit, &size1)));
-    RETURN_IF_ROCSPARSE_ERROR(
-        (rocsparse::primitives::segmented_radix_sort_keys_buffer_size<rocsparse_int, rocsparse_int>(
-            handle, nnz, m, startbit, endbit, &size2)));
-
-    *buffer_size = rocsparse::max(size1, size2);
-
-    *buffer_size = ((*buffer_size - 1) / 256 + 1) * 256;
-
-    // rocPRIM does not support in-place sorting, so we need additional buffer
-    // for all temporary arrays
-
-    // columns buffer
-    *buffer_size += ((sizeof(rocsparse_int) * nnz - 1) / 256 + 1) * 256;
-    // perm buffer
-    *buffer_size += ((sizeof(rocsparse_int) * nnz - 1) / 256 + 1) * 256;
-    // segm buffer
-    *buffer_size += ((sizeof(rocsparse_int) * (m + 1)) / 256 + 1) * 256;
+    RETURN_IF_ROCSPARSE_ERROR((rocsparse::csrsort_buffer_size_template<rocsparse_int, rocsparse_int>(
+        handle, m, n, nnz, csr_row_ptr, csr_col_ind, buffer_size)));
 
     return rocsparse_status_success;
     // LCOV_EXCL_START
@@ -135,120 +287,9 @@ try
     ROCSPARSE_CHECKARG_ARRAY(6, nnz, csr_col_ind);
     ROCSPARSE_CHECKARG_ARRAY(8, nnz, temp_buffer);
 
-    // Quick return if possible
-    if(m == 0 || n == 0 || nnz == 0)
-    {
-        return rocsparse_status_success;
-    }
+    RETURN_IF_ROCSPARSE_ERROR((rocsparse::csrsort_template<rocsparse_int, rocsparse_int>(
+        handle, m, n, nnz, descr->base, csr_row_ptr, csr_col_ind, perm, temp_buffer)));
 
-    // Stream
-    hipStream_t stream = handle->stream;
-
-    uint32_t startbit = 0;
-    uint32_t endbit   = rocsparse::clz(n);
-    size_t   size;
-
-    if(perm != nullptr)
-    {
-        // Sort pairs, if permutation vector is present
-        RETURN_IF_ROCSPARSE_ERROR((
-            rocsparse::primitives::
-                segmented_radix_sort_pairs_buffer_size<rocsparse_int, rocsparse_int, rocsparse_int>(
-                    handle, nnz, m, startbit, endbit, &size)));
-    }
-    else
-    {
-        // Sort keys, if no permutation vector is present
-        RETURN_IF_ROCSPARSE_ERROR(
-            (rocsparse::primitives::segmented_radix_sort_keys_buffer_size<rocsparse_int,
-                                                                          rocsparse_int>(
-                handle, nnz, m, startbit, endbit, &size)));
-    }
-
-    // Temporary buffer entry points
-    char* ptr = reinterpret_cast<char*>(temp_buffer);
-
-    // columns buffer
-    rocsparse_int* tmp_cols = reinterpret_cast<rocsparse_int*>(ptr);
-    ptr += ((sizeof(rocsparse_int) * nnz - 1) / 256 + 1) * 256;
-
-    // perm buffer
-    rocsparse_int* tmp_perm = reinterpret_cast<rocsparse_int*>(ptr);
-    ptr += ((sizeof(rocsparse_int) * nnz - 1) / 256 + 1) * 256;
-
-    // segm buffer
-    rocsparse_int* tmp_segm = reinterpret_cast<rocsparse_int*>(ptr);
-    ptr += ((sizeof(rocsparse_int) * (m + 1)) / 256 + 1) * 256;
-
-    // Index base one requires shift of offset positions
-    if(descr->base == rocsparse_index_base_one)
-    {
-#define CSRSORT_DIM 512
-        dim3 csrsort_blocks(m / CSRSORT_DIM + 1);
-        dim3 csrsort_threads(CSRSORT_DIM);
-
-        RETURN_IF_HIPLAUNCHKERNELGGL_ERROR((rocsparse::csrsort_shift_kernel<CSRSORT_DIM>),
-                                           csrsort_blocks,
-                                           csrsort_threads,
-                                           0,
-                                           stream,
-                                           m + 1,
-                                           csr_row_ptr,
-                                           tmp_segm);
-#undef CSRSORT_DIM
-    }
-
-    // rocprim buffer
-    void* tmp_rocprim = reinterpret_cast<void*>(ptr);
-
-    // Switch between offsets
-    const rocsparse_int* offsets = descr->base == rocsparse_index_base_one ? tmp_segm : csr_row_ptr;
-
-    // Sort by columns and obtain permutation vector
-
-    if(perm != nullptr)
-    {
-        // Sort by pairs, if permutation vector is present
-        rocsparse::primitives::double_buffer<rocsparse_int> keys(csr_col_ind, tmp_cols);
-        rocsparse::primitives::double_buffer<rocsparse_int> vals(perm, tmp_perm);
-
-        RETURN_IF_ROCSPARSE_ERROR(rocsparse::primitives::segmented_radix_sort_pairs(
-            handle, keys, vals, nnz, m, offsets, offsets + 1, startbit, endbit, size, tmp_rocprim));
-
-        if(keys.current() != csr_col_ind)
-        {
-            RETURN_IF_HIP_ERROR(rocsparse_hipMemcpyAsync(csr_col_ind,
-                                                         keys.current(),
-                                                         sizeof(rocsparse_int) * nnz,
-                                                         hipMemcpyDeviceToDevice,
-                                                         stream));
-        }
-        if(vals.current() != perm)
-        {
-            RETURN_IF_HIP_ERROR(rocsparse_hipMemcpyAsync(perm,
-                                                         vals.current(),
-                                                         sizeof(rocsparse_int) * nnz,
-                                                         hipMemcpyDeviceToDevice,
-                                                         stream));
-        }
-    }
-    else
-    {
-        // Sort by keys, if no permutation vector is present
-        rocsparse::primitives::double_buffer<rocsparse_int> keys(csr_col_ind, tmp_cols);
-
-        RETURN_IF_ROCSPARSE_ERROR(rocsparse::primitives::segmented_radix_sort_keys(
-            handle, keys, nnz, m, offsets, offsets + 1, startbit, endbit, size, tmp_rocprim));
-
-        if(keys.current() != csr_col_ind)
-        {
-            RETURN_IF_HIP_ERROR(rocsparse_hipMemcpyAsync(csr_col_ind,
-                                                         keys.current(),
-                                                         sizeof(rocsparse_int) * nnz,
-                                                         hipMemcpyDeviceToDevice,
-                                                         stream));
-        }
-    }
     return rocsparse_status_success;
     // LCOV_EXCL_START
 }
@@ -257,3 +298,27 @@ catch(...)
     RETURN_ROCSPARSE_EXCEPTION();
 }
 // LCOV_EXCL_STOP
+
+#define INSTANTIATE(I, J)                                                                          \
+    template rocsparse_status rocsparse::csrsort_buffer_size_template<I, J>(                       \
+        rocsparse_handle handle,                                                                   \
+        int64_t          m,                                                                        \
+        int64_t          n,                                                                        \
+        int64_t          nnz,                                                                      \
+        const void*      csr_row_ptr,                                                              \
+        const void*      csr_col_ind,                                                              \
+        size_t*          buffer_size);                                                             \
+    template rocsparse_status rocsparse::csrsort_template<I, J>(rocsparse_handle     handle,       \
+                                                                int64_t              m,            \
+                                                                int64_t              n,            \
+                                                                int64_t              nnz,          \
+                                                                rocsparse_index_base idx_base,     \
+                                                                const void*          csr_row_ptr,  \
+                                                                void*                csr_col_ind,  \
+                                                                void*                perm,         \
+                                                                void*                temp_buffer)
+
+INSTANTIATE(int32_t, int32_t);
+INSTANTIATE(int64_t, int32_t);
+INSTANTIATE(int64_t, int64_t);
+#undef INSTANTIATE

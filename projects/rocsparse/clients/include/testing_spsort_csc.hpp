@@ -1,6 +1,6 @@
 /*! \file */
 /* ************************************************************************
- * Copyright (C) 2018-2024 Advanced Micro Devices, Inc. All rights Reserved.
+ * Copyright (C) 2026 Advanced Micro Devices, Inc. All rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,22 +24,10 @@
 
 #pragma once
 
-#include <hip/hip_runtime.h>
+#include "rocsparse_arguments.hpp"
 
-namespace rocsparse
-{
-    // Shift CSR offsets
-    template <uint32_t BLOCKSIZE, typename I>
-    ROCSPARSE_KERNEL(BLOCKSIZE)
-    void csrsort_shift_kernel(int64_t size, const I* in, I* out)
-    {
-        const int64_t gid = int64_t(hipBlockIdx_x) * BLOCKSIZE + hipThreadIdx_x;
-
-        if(gid >= size)
-        {
-            return;
-        }
-
-        out[gid] = in[gid] - 1;
-    }
-}
+template <typename I, typename J, typename T>
+void testing_spsort_csc_bad_arg(const Arguments& arg);
+void testing_spsort_csc_extra(const Arguments& arg);
+template <typename I, typename J, typename T>
+void testing_spsort_csc(const Arguments& arg);

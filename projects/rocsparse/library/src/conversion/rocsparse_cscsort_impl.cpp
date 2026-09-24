@@ -1,6 +1,6 @@
 /*! \file */
 /* ************************************************************************
- * Copyright (C) 2019-2025 Advanced Micro Devices, Inc. All rights Reserved.
+ * Copyright (C) 2019-2026 Advanced Micro Devices, Inc. All rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -23,8 +23,47 @@
  * ************************************************************************ */
 
 #include "internal/conversion/rocsparse_cscsort.h"
-#include "internal/conversion/rocsparse_csrsort.h"
 #include "rocsparse_utility.hpp"
+
+#include "rocsparse_control.hpp"
+#include "rocsparse_cscsort.hpp"
+#include "rocsparse_csrsort.hpp"
+
+template <typename I, typename J>
+rocsparse_status rocsparse::cscsort_buffer_size_template(rocsparse_handle handle,
+                                                         int64_t          m,
+                                                         int64_t          n,
+                                                         int64_t          nnz,
+                                                         const void*      csc_col_ptr,
+                                                         const void*      csc_row_ind,
+                                                         size_t*          buffer_size)
+{
+    ROCSPARSE_ROUTINE_TRACE;
+
+    // Sorting the row indices within each column of A is sorting the column indices within
+    // each row of the transpose of A, stored in CSR format.
+    RETURN_IF_ROCSPARSE_ERROR((rocsparse::csrsort_buffer_size_template<I, J>(
+        handle, n, m, nnz, csc_col_ptr, csc_row_ind, buffer_size)));
+    return rocsparse_status_success;
+}
+
+template <typename I, typename J>
+rocsparse_status rocsparse::cscsort_template(rocsparse_handle     handle,
+                                             int64_t              m,
+                                             int64_t              n,
+                                             int64_t              nnz,
+                                             rocsparse_index_base idx_base,
+                                             const void*          csc_col_ptr,
+                                             void*                csc_row_ind,
+                                             void*                perm,
+                                             void*                temp_buffer)
+{
+    ROCSPARSE_ROUTINE_TRACE;
+
+    RETURN_IF_ROCSPARSE_ERROR((rocsparse::csrsort_template<I, J>(
+        handle, n, m, nnz, idx_base, csc_col_ptr, csc_row_ind, perm, temp_buffer)));
+    return rocsparse_status_success;
+}
 
 extern "C" rocsparse_status rocsparse_cscsort_buffer_size(rocsparse_handle     handle,
                                                           rocsparse_int        m,
@@ -45,14 +84,8 @@ try
     ROCSPARSE_CHECKARG_ARRAY(5, nnz, csc_row_ind);
     ROCSPARSE_CHECKARG_POINTER(6, buffer_size);
 
-    if(m == 0 || n == 0 || nnz == 0)
-    {
-        *buffer_size = 0;
-        return rocsparse_status_success;
-    }
-
-    RETURN_IF_ROCSPARSE_ERROR(
-        rocsparse_csrsort_buffer_size(handle, n, m, nnz, csc_col_ptr, csc_row_ind, buffer_size));
+    RETURN_IF_ROCSPARSE_ERROR((rocsparse::cscsort_buffer_size_template<rocsparse_int, rocsparse_int>(
+        handle, m, n, nnz, csc_col_ptr, csc_row_ind, buffer_size)));
     return rocsparse_status_success;
     // LCOV_EXCL_START
 }
@@ -84,14 +117,8 @@ try
     ROCSPARSE_CHECKARG_ARRAY(6, nnz, csc_row_ind);
     ROCSPARSE_CHECKARG_ARRAY(8, nnz, temp_buffer);
 
-    // Quick return if possible
-    if(m == 0 || n == 0 || nnz == 0)
-    {
-        return rocsparse_status_success;
-    }
-
-    RETURN_IF_ROCSPARSE_ERROR(
-        rocsparse_csrsort(handle, n, m, nnz, descr, csc_col_ptr, csc_row_ind, perm, temp_buffer));
+    RETURN_IF_ROCSPARSE_ERROR((rocsparse::cscsort_template<rocsparse_int, rocsparse_int>(
+        handle, m, n, nnz, descr->base, csc_col_ptr, csc_row_ind, perm, temp_buffer)));
     return rocsparse_status_success;
     // LCOV_EXCL_START
 }
@@ -100,3 +127,27 @@ catch(...)
     RETURN_ROCSPARSE_EXCEPTION();
 }
 // LCOV_EXCL_STOP
+
+#define INSTANTIATE(I, J)                                                                          \
+    template rocsparse_status rocsparse::cscsort_buffer_size_template<I, J>(                       \
+        rocsparse_handle handle,                                                                   \
+        int64_t          m,                                                                        \
+        int64_t          n,                                                                        \
+        int64_t          nnz,                                                                      \
+        const void*      csc_col_ptr,                                                              \
+        const void*      csc_row_ind,                                                              \
+        size_t*          buffer_size);                                                             \
+    template rocsparse_status rocsparse::cscsort_template<I, J>(rocsparse_handle     handle,       \
+                                                                int64_t              m,            \
+                                                                int64_t              n,            \
+                                                                int64_t              nnz,          \
+                                                                rocsparse_index_base idx_base,     \
+                                                                const void*          csc_col_ptr,  \
+                                                                void*                csc_row_ind,  \
+                                                                void*                perm,         \
+                                                                void*                temp_buffer)
+
+INSTANTIATE(int32_t, int32_t);
+INSTANTIATE(int64_t, int32_t);
+INSTANTIATE(int64_t, int64_t);
+#undef INSTANTIATE

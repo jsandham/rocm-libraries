@@ -1,6 +1,6 @@
 /*! \file */
 /* ************************************************************************
- * Copyright (C) 2018-2026 Advanced Micro Devices, Inc. All rights Reserved.
+ * Copyright (C) 2026 Advanced Micro Devices, Inc. All rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -21,6 +21,11 @@
  * THE SOFTWARE.
  *
  * ************************************************************************ */
+
+#include <iostream>
+#include <map>
+#include <sstream>
+#include <tuple>
 
 #include "internal/conversion/rocsparse_coosort.h"
 #include "internal/conversion/rocsparse_inverse_permutation.h"
@@ -85,11 +90,11 @@ namespace rocsparse
 
 template <typename J>
 rocsparse_status rocsparse::coosort_buffer_size_template(rocsparse_handle handle,
-                                                         J                m,
-                                                         J                n,
-                                                         J                nnz,
-                                                         const J*         coo_row_ind,
-                                                         const J*         coo_col_ind,
+                                                         int64_t          m,
+                                                         int64_t          n,
+                                                         int64_t          nnz,
+                                                         const void*      coo_row_ind,
+                                                         const void*      coo_col_ind,
                                                          size_t*          buffer_size)
 {
     ROCSPARSE_ROUTINE_TRACE;
@@ -119,31 +124,44 @@ rocsparse_status rocsparse::coosort_buffer_size_template(rocsparse_handle handle
         return rocsparse_status_success;
     }
 
+    const J* coo_row_ind_ = reinterpret_cast<const J*>(coo_row_ind);
+    const J* coo_col_ind_ = reinterpret_cast<const J*>(coo_col_ind);
+
     // Determine rocprim buffer size when coosort is by row
     size_t buffer_size_by_row;
-    RETURN_IF_ROCSPARSE_ERROR(rocsparse::determine_rocprim_buffer_size(
-        handle, m, n, nnz, coo_row_ind, coo_col_ind, &buffer_size_by_row));
+    RETURN_IF_ROCSPARSE_ERROR(rocsparse::determine_rocprim_buffer_size<J>(handle,
+                                                                          static_cast<J>(m),
+                                                                          static_cast<J>(n),
+                                                                          static_cast<J>(nnz),
+                                                                          coo_row_ind_,
+                                                                          coo_col_ind_,
+                                                                          &buffer_size_by_row));
 
     // Determine rocprim buffer size when coosort is by column
     size_t buffer_size_by_col;
-    RETURN_IF_ROCSPARSE_ERROR(rocsparse::determine_rocprim_buffer_size(
-        handle, n, m, nnz, coo_col_ind, coo_row_ind, &buffer_size_by_col));
+    RETURN_IF_ROCSPARSE_ERROR(rocsparse::determine_rocprim_buffer_size<J>(handle,
+                                                                          static_cast<J>(n),
+                                                                          static_cast<J>(m),
+                                                                          static_cast<J>(nnz),
+                                                                          coo_col_ind_,
+                                                                          coo_row_ind_,
+                                                                          &buffer_size_by_col));
 
     // Use the maximum buffer size chosen between sorting by row or by column
-    *buffer_size = rocsparse::max(buffer_size_by_row, buffer_size_by_col);
-    *buffer_size = ((*buffer_size - 1) / 256 + 1) * 256;
+    *buffer_size
+        = rocsparse::align_size<char>(rocsparse::max(buffer_size_by_row, buffer_size_by_col));
 
     // rocPRIM does not support in-place sorting, so we need additional buffer
     // for all temporary arrays
 
     // rows buffer
-    *buffer_size += ((sizeof(J) * nnz - 1) / 256 + 1) * 256;
+    *buffer_size += rocsparse::align_size<J>(nnz);
     // columns buffer
-    *buffer_size += ((sizeof(J) * nnz - 1) / 256 + 1) * 256;
+    *buffer_size += rocsparse::align_size<J>(nnz);
     // perm buffer
-    *buffer_size += ((sizeof(J) * nnz - 1) / 256 + 1) * 256;
-    // segment buffer
-    *buffer_size += ((sizeof(J) * rocsparse::max(m, n)) / 256 + 1) * 256;
+    *buffer_size += rocsparse::align_size<J>(nnz);
+    // segment buffer, which holds max(m, n) + 1 segment offsets after the exclusive scan
+    *buffer_size += rocsparse::align_size<J>(rocsparse::max(m, n) + 1);
 
     return rocsparse_status_success;
 }
@@ -159,7 +177,7 @@ try
 {
     ROCSPARSE_ROUTINE_TRACE;
 
-    return rocsparse::coosort_buffer_size_template(
+    return rocsparse::coosort_buffer_size_template<rocsparse_int>(
         handle, m, n, nnz, coo_row_ind, coo_col_ind, buffer_size);
     // LCOV_EXCL_START
 }
@@ -224,12 +242,12 @@ namespace rocsparse
 
 template <typename J>
 rocsparse_status rocsparse::coosort_by_row_template(rocsparse_handle handle,
-                                                    J                m,
-                                                    J                n,
-                                                    J                nnz,
-                                                    J*               coo_row_ind,
-                                                    J*               coo_col_ind,
-                                                    J*               perm,
+                                                    int64_t          m,
+                                                    int64_t          n,
+                                                    int64_t          nnz,
+                                                    void*            coo_row_ind,
+                                                    void*            coo_col_ind,
+                                                    void*            perm,
                                                     void*            temp_buffer)
 {
     ROCSPARSE_ROUTINE_TRACE;
@@ -269,27 +287,31 @@ rocsparse_status rocsparse::coosort_by_row_template(rocsparse_handle handle,
         return rocsparse_status_invalid_pointer;
     }
 
+    J* row_ind = reinterpret_cast<J*>(coo_row_ind);
+    J* col_ind = reinterpret_cast<J*>(coo_col_ind);
+    J* perm_   = reinterpret_cast<J*>(perm);
+
     // Stream
     hipStream_t stream = handle->stream;
 
     uint32_t startbit = 0;
-    uint32_t endbit   = rocsparse::clz(m);
+    uint32_t endbit   = rocsparse::clz(static_cast<rocsparse_int>(m));
 
     // Temporary buffer entry points
     char* ptr = reinterpret_cast<char*>(temp_buffer);
 
     // Permutation vector given
     J* work1 = reinterpret_cast<J*>(ptr);
-    ptr += ((sizeof(J) * nnz - 1) / 256 + 1) * 256;
+    ptr += rocsparse::align_size<J>(nnz);
 
     J* work2 = reinterpret_cast<J*>(ptr);
-    ptr += ((sizeof(J) * nnz - 1) / 256 + 1) * 256;
+    ptr += rocsparse::align_size<J>(nnz);
 
     J* work3 = reinterpret_cast<J*>(ptr);
-    ptr += ((sizeof(J) * nnz - 1) / 256 + 1) * 256;
+    ptr += rocsparse::align_size<J>(nnz);
 
     J* work4 = reinterpret_cast<J*>(ptr);
-    ptr += ((sizeof(J) * rocsparse::max(m, n)) / 256 + 1) * 256;
+    ptr += rocsparse::align_size<J>(rocsparse::max(m, n) + 1);
 
     // Temporary rocprim buffer
     size_t size        = 0;
@@ -299,10 +321,10 @@ rocsparse_status rocsparse::coosort_by_row_template(rocsparse_handle handle,
     {
         // Create identitiy permutation to keep track of reorderings
         RETURN_IF_ROCSPARSE_ERROR(
-            rocsparse::create_identity_permutation_template(handle, nnz, work1));
+            rocsparse::create_identity_permutation_template<J>(handle, static_cast<J>(nnz), work1));
 
         // Sort by rows and store permutation
-        rocsparse::primitives::double_buffer<J> keys(coo_row_ind, work3);
+        rocsparse::primitives::double_buffer<J> keys(row_ind, work3);
         rocsparse::primitives::double_buffer<J> vals(work1, work2);
 
         RETURN_IF_ROCSPARSE_ERROR((rocsparse::primitives::radix_sort_pairs_buffer_size<J, J>(
@@ -315,17 +337,17 @@ rocsparse_status rocsparse::coosort_by_row_template(rocsparse_handle handle,
         J* alt_map = vals.alternate();
 
         // Copy sorted rows, if stored in buffer
-        if(output != coo_row_ind)
+        if(output != row_ind)
         {
             RETURN_IF_HIP_ERROR(rocsparse_hipMemcpyAsync(
-                coo_row_ind, output, sizeof(J) * nnz, hipMemcpyDeviceToDevice, stream));
+                row_ind, output, sizeof(J) * nnz, hipMemcpyDeviceToDevice, stream));
         }
 
         // Obtain segments for segmented sort by columns
         RETURN_IF_ROCSPARSE_ERROR(
             rocsparse::primitives::run_length_encode_buffer_size<J>(handle, nnz, &size));
         RETURN_IF_ROCSPARSE_ERROR(rocsparse::primitives::run_length_encode(
-            handle, coo_row_ind, work3 + 1, work4, work3, nnz, size, tmp_rocprim));
+            handle, row_ind, work3 + 1, work4, work3, nnz, size, tmp_rocprim));
 
         J nsegm;
         RETURN_IF_HIP_ERROR(
@@ -349,8 +371,8 @@ rocsparse_status rocsparse::coosort_by_row_template(rocsparse_handle handle,
                                            coosort_threads,
                                            0,
                                            stream,
-                                           nnz,
-                                           coo_col_ind,
+                                           static_cast<J>(nnz),
+                                           col_ind,
                                            mapping,
                                            work3);
 
@@ -359,17 +381,17 @@ rocsparse_status rocsparse::coosort_by_row_template(rocsparse_handle handle,
                                            coosort_threads,
                                            0,
                                            stream,
-                                           nnz,
-                                           perm,
+                                           static_cast<J>(nnz),
+                                           perm_,
                                            mapping,
                                            alt_map);
 #undef COOSORT_DIM
 
         // Sort columns per row
-        endbit = rocsparse::clz(n);
+        endbit = rocsparse::clz(static_cast<rocsparse_int>(n));
 
-        rocsparse::primitives::double_buffer<J> keys2(work3, coo_col_ind);
-        rocsparse::primitives::double_buffer<J> vals2(alt_map, perm);
+        rocsparse::primitives::double_buffer<J> keys2(work3, col_ind);
+        rocsparse::primitives::double_buffer<J> vals2(alt_map, perm_);
 
         RETURN_IF_ROCSPARSE_ERROR(
             (rocsparse::primitives::segmented_radix_sort_pairs_buffer_size<J, J, J>(
@@ -390,17 +412,17 @@ rocsparse_status rocsparse::coosort_by_row_template(rocsparse_handle handle,
         mapping = vals2.current();
 
         // Copy sorted columns, if stored in buffer
-        if(output != coo_col_ind)
+        if(output != col_ind)
         {
             RETURN_IF_HIP_ERROR(rocsparse_hipMemcpyAsync(
-                coo_col_ind, output, sizeof(J) * nnz, hipMemcpyDeviceToDevice, stream));
+                col_ind, output, sizeof(J) * nnz, hipMemcpyDeviceToDevice, stream));
         }
 
         // Copy reordered permutation, if stored in buffer
-        if(mapping != perm)
+        if(mapping != perm_)
         {
             RETURN_IF_HIP_ERROR(rocsparse_hipMemcpyAsync(
-                perm, mapping, sizeof(J) * nnz, hipMemcpyDeviceToDevice, stream));
+                perm_, mapping, sizeof(J) * nnz, hipMemcpyDeviceToDevice, stream));
         }
     }
     else
@@ -408,8 +430,8 @@ rocsparse_status rocsparse::coosort_by_row_template(rocsparse_handle handle,
         // No permutation vector given
 
         // Sort by rows and permute columns
-        rocsparse::primitives::double_buffer<J> keys(coo_row_ind, work3);
-        rocsparse::primitives::double_buffer<J> vals(coo_col_ind, work2);
+        rocsparse::primitives::double_buffer<J> keys(row_ind, work3);
+        rocsparse::primitives::double_buffer<J> vals(col_ind, work2);
 
         RETURN_IF_ROCSPARSE_ERROR((rocsparse::primitives::radix_sort_pairs_buffer_size<J, J>(
             handle, nnz, startbit, endbit, &size)));
@@ -418,17 +440,17 @@ rocsparse_status rocsparse::coosort_by_row_template(rocsparse_handle handle,
         J* output = keys.current();
 
         // Copy sorted rows, if stored in buffer
-        if(output != coo_row_ind)
+        if(output != row_ind)
         {
             RETURN_IF_HIP_ERROR(rocsparse_hipMemcpyAsync(
-                coo_row_ind, output, sizeof(J) * nnz, hipMemcpyDeviceToDevice, stream));
+                row_ind, output, sizeof(J) * nnz, hipMemcpyDeviceToDevice, stream));
         }
 
         // Obtain segments for segmented sort by columns
         RETURN_IF_ROCSPARSE_ERROR(
             rocsparse::primitives::run_length_encode_buffer_size<J>(handle, nnz, &size));
         RETURN_IF_ROCSPARSE_ERROR(rocsparse::primitives::run_length_encode(
-            handle, coo_row_ind, work3 + 1, work4, work3, nnz, size, tmp_rocprim));
+            handle, row_ind, work3 + 1, work4, work3, nnz, size, tmp_rocprim));
 
         J nsegm;
         RETURN_IF_HIP_ERROR(
@@ -443,7 +465,7 @@ rocsparse_status rocsparse::coosort_by_row_template(rocsparse_handle handle,
             handle, work4, work4, static_cast<J>(0), nsegm + 1, size, tmp_rocprim));
 
         // Sort columns per row
-        endbit = rocsparse::clz(n);
+        endbit = rocsparse::clz(static_cast<rocsparse_int>(n));
 
         RETURN_IF_ROCSPARSE_ERROR(
             (rocsparse::primitives::segmented_radix_sort_keys_buffer_size<J, J>(
@@ -454,10 +476,10 @@ rocsparse_status rocsparse::coosort_by_row_template(rocsparse_handle handle,
         output = vals.current();
 
         // Copy sorted columns, if stored in buffer
-        if(output != coo_col_ind)
+        if(output != col_ind)
         {
             RETURN_IF_HIP_ERROR(rocsparse_hipMemcpyAsync(
-                coo_col_ind, output, sizeof(J) * nnz, hipMemcpyDeviceToDevice, stream));
+                col_ind, output, sizeof(J) * nnz, hipMemcpyDeviceToDevice, stream));
         }
     }
 
@@ -496,7 +518,7 @@ try
         return rocsparse_status_success;
     }
 
-    RETURN_IF_ROCSPARSE_ERROR(rocsparse::coosort_by_row_template(
+    RETURN_IF_ROCSPARSE_ERROR(rocsparse::coosort_by_row_template<rocsparse_int>(
         handle, m, n, nnz, coo_row_ind, coo_col_ind, perm, temp_buffer));
 
     return rocsparse_status_success;
@@ -564,17 +586,17 @@ namespace rocsparse
 
 template <typename J>
 rocsparse_status rocsparse::coosort_by_column_template(rocsparse_handle handle,
-                                                       J                m,
-                                                       J                n,
-                                                       J                nnz,
-                                                       J*               coo_row_ind,
-                                                       J*               coo_col_ind,
-                                                       J*               perm,
+                                                       int64_t          m,
+                                                       int64_t          n,
+                                                       int64_t          nnz,
+                                                       void*            coo_row_ind,
+                                                       void*            coo_col_ind,
+                                                       void*            perm,
                                                        void*            temp_buffer)
 {
     ROCSPARSE_ROUTINE_TRACE;
 
-    RETURN_IF_ROCSPARSE_ERROR(rocsparse::coosort_by_row_template(
+    RETURN_IF_ROCSPARSE_ERROR(rocsparse::coosort_by_row_template<J>(
         handle, n, m, nnz, coo_col_ind, coo_row_ind, perm, temp_buffer));
     return rocsparse_status_success;
 }
@@ -611,7 +633,7 @@ try
         return rocsparse_status_success;
     }
 
-    RETURN_IF_ROCSPARSE_ERROR(rocsparse::coosort_by_column_template(
+    RETURN_IF_ROCSPARSE_ERROR(rocsparse::coosort_by_column_template<rocsparse_int>(
         handle, m, n, nnz, coo_row_ind, coo_col_ind, perm, temp_buffer));
 
     return rocsparse_status_success;
@@ -623,32 +645,31 @@ catch(...)
 }
 // LCOV_EXCL_STOP
 
-#define INSTANTIATE(J)                                                                            \
-    template rocsparse_status rocsparse::coosort_buffer_size_template<J>(rocsparse_handle handle, \
-                                                                         J                m,      \
-                                                                         J                n,      \
-                                                                         J                nnz,    \
-                                                                         const J* coo_row_ind,    \
-                                                                         const J* coo_col_ind,    \
-                                                                         size_t*  buffer_size);    \
-    template rocsparse_status rocsparse::coosort_by_row_template<J>(rocsparse_handle handle,      \
-                                                                    J                m,           \
-                                                                    J                n,           \
-                                                                    J                nnz,         \
-                                                                    J * coo_row_ind,              \
-                                                                    J * coo_col_ind,              \
-                                                                    J * perm,                     \
-                                                                    void* temp_buffer);           \
-                                                                                                  \
-    template rocsparse_status rocsparse::coosort_by_column_template<J>(rocsparse_handle handle,   \
-                                                                       J                m,        \
-                                                                       J                n,        \
-                                                                       J                nnz,      \
-                                                                       J * coo_row_ind,           \
-                                                                       J * coo_col_ind,           \
-                                                                       J * perm,                  \
-                                                                       void* temp_buffer)
-
+#define INSTANTIATE(J)                                                                               \
+    template rocsparse_status rocsparse::coosort_buffer_size_template<J>(rocsparse_handle handle,    \
+                                                                         int64_t          m,         \
+                                                                         int64_t          n,         \
+                                                                         int64_t          nnz,       \
+                                                                         const void* coo_row_ind,    \
+                                                                         const void* coo_col_ind,    \
+                                                                         size_t*     buffer_size);       \
+    template rocsparse_status rocsparse::coosort_by_row_template<J>(rocsparse_handle handle,         \
+                                                                    int64_t          m,              \
+                                                                    int64_t          n,              \
+                                                                    int64_t          nnz,            \
+                                                                    void*            coo_row_ind,    \
+                                                                    void*            coo_col_ind,    \
+                                                                    void*            perm,           \
+                                                                    void*            temp_buffer);              \
+                                                                                                     \
+    template rocsparse_status rocsparse::coosort_by_column_template<J>(rocsparse_handle handle,      \
+                                                                       int64_t          m,           \
+                                                                       int64_t          n,           \
+                                                                       int64_t          nnz,         \
+                                                                       void*            coo_row_ind, \
+                                                                       void*            coo_col_ind, \
+                                                                       void*            perm,        \
+                                                                       void*            temp_buffer)
 INSTANTIATE(int32_t);
 INSTANTIATE(int64_t);
 #undef INSTANTIATE
