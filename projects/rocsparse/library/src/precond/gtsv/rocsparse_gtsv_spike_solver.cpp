@@ -528,28 +528,26 @@ namespace rocsparse
     }
 }
 
-
-
 template <uint32_t LEVEL, typename T>
 rocsparse_status rocsparse::gtsv_spike_solver_template(rocsparse_handle handle,
-                                                        rocsparse_int    m,
-                                                        rocsparse_int    n,
-                                                        rocsparse_int    ldb,
-                                                        const T*         dl, //lower_diag,
-                                                        const T*         d, //main_diag,
-                                                        const T*         du, //upper_diag,
-                                                        T*               B,
-                                                        T**              dl_pad, //lower_pad,
-                                                        T**              d_pad, //main_pad,
-                                                        T**              du_pad, //upper_pad,
-                                                        T**              B_pad,
-                                                        T**              w_pad,
-                                                        T**              v_pad,
-                                                        T**              mt_pad,
-                                                        T**              sl, //S_lower,
-                                                        T**              s, //S_main,
-                                                        T**              su, //S_upper,
-                                                        T**              sB)
+                                                       rocsparse_int    m,
+                                                       rocsparse_int    n,
+                                                       rocsparse_int    ldb,
+                                                       const T*         dl, //lower_diag,
+                                                       const T*         d, //main_diag,
+                                                       const T*         du, //upper_diag,
+                                                       T*               B,
+                                                       T**              dl_pad, //lower_pad,
+                                                       T**              d_pad, //main_pad,
+                                                       T**              du_pad, //upper_pad,
+                                                       T**              B_pad,
+                                                       T**              w_pad,
+                                                       T**              v_pad,
+                                                       T**              mt_pad,
+                                                       T**              sl, //S_lower,
+                                                       T**              s, //S_main,
+                                                       T**              su, //S_upper,
+                                                       T**              sB)
 {
     ROCSPARSE_ROUTINE_TRACE;
 
@@ -562,40 +560,40 @@ rocsparse_status rocsparse::gtsv_spike_solver_template(rocsparse_handle handle,
 
     RETURN_IF_ROCSPARSE_ERROR((launch_data_marshaling<128, BLOCKDIM, 256>(
         handle, m, m_pad, dl, d, du, dl_pad[LEVEL], d_pad[LEVEL], du_pad[LEVEL])));
-    RETURN_IF_ROCSPARSE_ERROR((launch_data_marshaling_B<128, BLOCKDIM, 256>(
-        handle, m, m_pad, n, ldb, B, B_pad[LEVEL])));
+    RETURN_IF_ROCSPARSE_ERROR(
+        (launch_data_marshaling_B<128, BLOCKDIM, 256>(handle, m, m_pad, n, ldb, B, B_pad[LEVEL])));
 
     RETURN_IF_HIP_ERROR(hipMemsetAsync(w_pad[LEVEL], 0, sizeof(T) * m_pad, handle->stream));
     RETURN_IF_HIP_ERROR(hipMemsetAsync(v_pad[LEVEL], 0, sizeof(T) * m_pad, handle->stream));
 
     RETURN_IF_ROCSPARSE_ERROR((launch_LBMT_solve_wvmt<BLOCKSIZE, BLOCKDIM>(handle,
-                                                                            m_pad,
-                                                                            dl_pad[LEVEL],
-                                                                            d_pad[LEVEL],
-                                                                            du_pad[LEVEL],
-                                                                            w_pad[LEVEL],
-                                                                            v_pad[LEVEL],
-                                                                            mt_pad[LEVEL])));
+                                                                           m_pad,
+                                                                           dl_pad[LEVEL],
+                                                                           d_pad[LEVEL],
+                                                                           du_pad[LEVEL],
+                                                                           w_pad[LEVEL],
+                                                                           v_pad[LEVEL],
+                                                                           mt_pad[LEVEL])));
 
     RETURN_IF_ROCSPARSE_ERROR((launch_LBMT_solve_rhs<BLOCKSIZE, BLOCKDIM>(handle,
-                                                                            m_pad,
-                                                                            n,
-                                                                            dl_pad[LEVEL],
-                                                                            d_pad[LEVEL],
-                                                                            du_pad[LEVEL],
-                                                                            mt_pad[LEVEL],
-                                                                            B_pad[LEVEL])));
+                                                                          m_pad,
+                                                                          n,
+                                                                          dl_pad[LEVEL],
+                                                                          d_pad[LEVEL],
+                                                                          du_pad[LEVEL],
+                                                                          mt_pad[LEVEL],
+                                                                          B_pad[LEVEL])));
 
     RETURN_IF_ROCSPARSE_ERROR((launch_fill_s_matrix<BLOCKSIZE, BLOCKDIM>(handle,
-                                                                            m_pad,
-                                                                            n,
-                                                                            w_pad[LEVEL],
-                                                                            v_pad[LEVEL],
-                                                                            B_pad[LEVEL],
-                                                                            sl[LEVEL],
-                                                                            s[LEVEL],
-                                                                            su[LEVEL],
-                                                                            sB[LEVEL])));
+                                                                         m_pad,
+                                                                         n,
+                                                                         w_pad[LEVEL],
+                                                                         v_pad[LEVEL],
+                                                                         B_pad[LEVEL],
+                                                                         sl[LEVEL],
+                                                                         s[LEVEL],
+                                                                         su[LEVEL],
+                                                                         sB[LEVEL])));
 
     if(s_size <= static_cast<int>(BLOCKDIM))
     {
@@ -605,24 +603,24 @@ rocsparse_status rocsparse::gtsv_spike_solver_template(rocsparse_handle handle,
     else if constexpr(LEVEL + 1 < gtsv_buffer_data<T>::MAX_RECURSION_LEVELS)
     {
         RETURN_IF_ROCSPARSE_ERROR((gtsv_spike_solver_template<LEVEL + 1>(handle,
-                                                                            s_size,
-                                                                            n,
-                                                                            s_size,
-                                                                            sl[LEVEL],
-                                                                            s[LEVEL],
-                                                                            su[LEVEL],
-                                                                            sB[LEVEL],
-                                                                            dl_pad,
-                                                                            d_pad,
-                                                                            du_pad,
-                                                                            B_pad,
-                                                                            w_pad,
-                                                                            v_pad,
-                                                                            mt_pad,
-                                                                            sl,
-                                                                            s,
-                                                                            su,
-                                                                            sB)));
+                                                                         s_size,
+                                                                         n,
+                                                                         s_size,
+                                                                         sl[LEVEL],
+                                                                         s[LEVEL],
+                                                                         su[LEVEL],
+                                                                         sB[LEVEL],
+                                                                         dl_pad,
+                                                                         d_pad,
+                                                                         du_pad,
+                                                                         B_pad,
+                                                                         w_pad,
+                                                                         v_pad,
+                                                                         mt_pad,
+                                                                         sl,
+                                                                         s,
+                                                                         su,
+                                                                         sB)));
     }
     else
     {
@@ -750,21 +748,20 @@ rocsparse_status rocsparse::gtsv_spike_solver_template2(rocsparse_handle handle,
 
     RETURN_IF_ROCSPARSE_ERROR((launch_data_marshaling2<128, BLOCKDIM, 256>(
         handle, m, m_pad, dl, d, du, dl_pad[LEVEL], d_pad[LEVEL], du_pad[LEVEL])));
-    RETURN_IF_ROCSPARSE_ERROR((launch_data_marshaling_B2<128, BLOCKDIM, 256>(
-        handle, m, m_pad, n, ldb, B, B_pad[LEVEL])));
+    RETURN_IF_ROCSPARSE_ERROR(
+        (launch_data_marshaling_B2<128, BLOCKDIM, 256>(handle, m, m_pad, n, ldb, B, B_pad[LEVEL])));
 
     RETURN_IF_HIP_ERROR(hipMemsetAsync(w_pad[LEVEL], 0, sizeof(T) * m_pad, handle->stream));
     RETURN_IF_HIP_ERROR(hipMemsetAsync(v_pad[LEVEL], 0, sizeof(T) * m_pad, handle->stream));
 
-    RETURN_IF_ROCSPARSE_ERROR(
-        (launch_LBMT_solve_wvmt2<BLOCKSIZE, BLOCKDIM, 256>(handle,
-                                                            m_pad,
-                                                            dl_pad[LEVEL],
-                                                            d_pad[LEVEL],
-                                                            du_pad[LEVEL],
-                                                            w_pad[LEVEL],
-                                                            v_pad[LEVEL],
-                                                            mt_pad[LEVEL])));
+    RETURN_IF_ROCSPARSE_ERROR((launch_LBMT_solve_wvmt2<BLOCKSIZE, BLOCKDIM, 256>(handle,
+                                                                                 m_pad,
+                                                                                 dl_pad[LEVEL],
+                                                                                 d_pad[LEVEL],
+                                                                                 du_pad[LEVEL],
+                                                                                 w_pad[LEVEL],
+                                                                                 v_pad[LEVEL],
+                                                                                 mt_pad[LEVEL])));
 
     RETURN_IF_ROCSPARSE_ERROR((launch_LBMT_solve_rhs2<BLOCKSIZE, BLOCKDIM, 256>(handle,
                                                                                 m_pad,
@@ -776,15 +773,15 @@ rocsparse_status rocsparse::gtsv_spike_solver_template2(rocsparse_handle handle,
                                                                                 B_pad[LEVEL])));
 
     RETURN_IF_ROCSPARSE_ERROR((launch_fill_s_matrix2<BLOCKSIZE, BLOCKDIM, 256>(handle,
-                                                                                m_pad,
-                                                                                n,
-                                                                                w_pad[LEVEL],
-                                                                                v_pad[LEVEL],
-                                                                                B_pad[LEVEL],
-                                                                                sl[LEVEL],
-                                                                                s[LEVEL],
-                                                                                su[LEVEL],
-                                                                                sB[LEVEL])));
+                                                                               m_pad,
+                                                                               n,
+                                                                               w_pad[LEVEL],
+                                                                               v_pad[LEVEL],
+                                                                               B_pad[LEVEL],
+                                                                               sl[LEVEL],
+                                                                               s[LEVEL],
+                                                                               su[LEVEL],
+                                                                               sB[LEVEL])));
 
     if(s_size <= static_cast<int>(BLOCKDIM))
     {
@@ -794,24 +791,24 @@ rocsparse_status rocsparse::gtsv_spike_solver_template2(rocsparse_handle handle,
     else if constexpr(LEVEL + 1 < gtsv_buffer_data<T>::MAX_RECURSION_LEVELS)
     {
         RETURN_IF_ROCSPARSE_ERROR((gtsv_spike_solver_template2<LEVEL + 1>(handle,
-                                                                            s_size,
-                                                                            n,
-                                                                            s_size,
-                                                                            sl[LEVEL],
-                                                                            s[LEVEL],
-                                                                            su[LEVEL],
-                                                                            sB[LEVEL],
-                                                                            dl_pad,
-                                                                            d_pad,
-                                                                            du_pad,
-                                                                            B_pad,
-                                                                            w_pad,
-                                                                            v_pad,
-                                                                            mt_pad,
-                                                                            sl,
-                                                                            s,
-                                                                            su,
-                                                                            sB)));
+                                                                          s_size,
+                                                                          n,
+                                                                          s_size,
+                                                                          sl[LEVEL],
+                                                                          s[LEVEL],
+                                                                          su[LEVEL],
+                                                                          sB[LEVEL],
+                                                                          dl_pad,
+                                                                          d_pad,
+                                                                          du_pad,
+                                                                          B_pad,
+                                                                          w_pad,
+                                                                          v_pad,
+                                                                          mt_pad,
+                                                                          sl,
+                                                                          s,
+                                                                          su,
+                                                                          sB)));
     }
     else
     {
@@ -832,27 +829,26 @@ rocsparse_status rocsparse::gtsv_spike_solver_template2(rocsparse_handle handle,
 
 // Level 0 is the entry point from gtsv_template. Instantiating it also emits the
 // deeper levels, because each level calls the next one under if constexpr.
-#define INSTANTIATE(T)                                                                   \
-    template rocsparse_status rocsparse::gtsv_spike_solver_template<0, T>(               \
-        rocsparse_handle handle,                                                         \
-        rocsparse_int    m,                                                              \
-        rocsparse_int    n,                                                              \
-        rocsparse_int    ldb,                                                            \
-        const T*         dl,                                                             \
-        const T*         d,                                                              \
-        const T*         du,                                                             \
-        T*               B,                                                               \
-        T**              dl_pad,                                                          \
-        T**              d_pad,                                                          \
-        T**              du_pad,                                                         \
-        T**              B_pad,                                                          \
-        T**              w_pad,                                                          \
-        T**              v_pad,                                                          \
-        T**              mt_pad,                                                         \
-        T**              sl,                                                             \
-        T**              s,                                                              \
-        T**              su,                                                            \
-        T**              sB);
+#define INSTANTIATE(T)                                                                             \
+    template rocsparse_status rocsparse::gtsv_spike_solver_template<0, T>(rocsparse_handle handle, \
+                                                                          rocsparse_int    m,      \
+                                                                          rocsparse_int    n,      \
+                                                                          rocsparse_int    ldb,    \
+                                                                          const T*         dl,     \
+                                                                          const T*         d,      \
+                                                                          const T*         du,     \
+                                                                          T*               B,      \
+                                                                          T**              dl_pad, \
+                                                                          T**              d_pad,  \
+                                                                          T**              du_pad, \
+                                                                          T**              B_pad,  \
+                                                                          T**              w_pad,  \
+                                                                          T**              v_pad,  \
+                                                                          T**              mt_pad, \
+                                                                          T**              sl,     \
+                                                                          T**              s,      \
+                                                                          T**              su,     \
+                                                                          T**              sB);
 
 INSTANTIATE(float);
 INSTANTIATE(double);

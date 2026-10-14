@@ -33,12 +33,12 @@
 namespace rocsparse
 {
     template <uint32_t BLOCKSIZE, uint32_t BLOCKDIM, uint32_t NCOLS, typename T>
-    ROCSPARSE_KERNEL(BLOCKSIZE) void solve_fused_kernel(int m,
-                                    const T* __restrict__ lower,
-                                    const T* __restrict__ main,
-                                    const T* __restrict__ upper,
-                                    const T* __restrict__ B,
-                                    T* __restrict__ X)
+    ROCSPARSE_KERNEL(BLOCKSIZE)
+    void solve_fused_kernel(int m,
+                            const T* __restrict__ lower,
+                            const T* __restrict__ main,
+                            const T* __restrict__ upper,
+                            T* __restrict__ B)
     {
         static_assert(BLOCKDIM >= 2);
         static_assert(BLOCKDIM % 2 == 0);
@@ -46,8 +46,6 @@ namespace rocsparse
 
         const int tid = threadIdx.x;
         const int bid = blockIdx.x;
-
-        constexpr int M = BLOCKSIZE * BLOCKDIM;
 
         T rhs_reg[BLOCKDIM * NCOLS];
         for(int c = 0; c < NCOLS; c++)
@@ -76,10 +74,13 @@ namespace rocsparse
 
             for(int i = 0; i < BLOCKDIM; i++)
             {
-                lower_reg[i] = (BLOCKDIM * tid + i < m) ? lower[BLOCKDIM * tid + i] : static_cast<T>(0);
-                main_reg[i]  = (BLOCKDIM * tid + i < m) ? main[BLOCKDIM * tid + i] : static_cast<T>(1);
-                upper_reg[i] = (BLOCKDIM * tid + i < m) ? upper[BLOCKDIM * tid + i] : static_cast<T>(0);
-                mt_reg[i]    = static_cast<T>(0);
+                lower_reg[i]
+                    = (BLOCKDIM * tid + i < m) ? lower[BLOCKDIM * tid + i] : static_cast<T>(0);
+                main_reg[i]
+                    = (BLOCKDIM * tid + i < m) ? main[BLOCKDIM * tid + i] : static_cast<T>(1);
+                upper_reg[i]
+                    = (BLOCKDIM * tid + i < m) ? upper[BLOCKDIM * tid + i] : static_cast<T>(0);
+                mt_reg[i] = static_cast<T>(0);
             }
 
             // LBMT solve
@@ -374,7 +375,8 @@ namespace rocsparse
 
                         if(k < (S_SIZE - 2))
                         {
-                            S_rhs[S_SIZE * c + k + 2] += -(-ak_1 * ak_2 * rhsk + ak_2 * bk * rhsk_1);
+                            S_rhs[S_SIZE * c + k + 2]
+                                += -(-ak_1 * ak_2 * rhsk + ak_2 * bk * rhsk_1);
                         }
                     }
 
@@ -439,21 +441,23 @@ namespace rocsparse
             //   2*tid+1 < S_SIZE-1  -> S_rhs[2*tid + 2] (swapped with its right neighbour)
             //   2*tid+1 == S_SIZE-1 -> S_rhs[S_SIZE-1] (last element, not touched)
             const T val_odd = (2 * tid + 1 < S_SIZE - 1) ? S_rhs[S_SIZE * c + 2 * tid + 2]
-                                                        : S_rhs[S_SIZE * c + S_SIZE - 1];
+                                                         : S_rhs[S_SIZE * c + S_SIZE - 1];
 
             rhs_reg[BLOCKDIM * c + 0]            = val_even;
             rhs_reg[BLOCKDIM * c + BLOCKDIM - 1] = val_odd;
 
             // backward solve (S * x = rhs)
-            const T tmp1
-                = __shfl_sync(0xFFFFFFFF, rhs_reg[BLOCKDIM * c + (BLOCKDIM - 1)], tid - 1, BLOCKSIZE);
-            const T tmp2 = __shfl_sync(0xFFFFFFFF, rhs_reg[BLOCKDIM * c + 0], tid + 1, BLOCKSIZE);
-            const T x1   = (tid >= 1) ? tmp1 : static_cast<T>(0);
-            const T x2   = (tid < (BLOCKSIZE - 1)) ? tmp2 : static_cast<T>(0);
+            const T tmp1 = __shfl_sync(
+                0xFFFFFFFFULL, rhs_reg[BLOCKDIM * c + (BLOCKDIM - 1)], tid - 1, BLOCKSIZE);
+            const T tmp2
+                = __shfl_sync(0xFFFFFFFFULL, rhs_reg[BLOCKDIM * c + 0], tid + 1, BLOCKSIZE);
+            const T x1 = (tid >= 1) ? tmp1 : static_cast<T>(0);
+            const T x2 = (tid < (BLOCKSIZE - 1)) ? tmp2 : static_cast<T>(0);
 
             for(int j = 1; j < BLOCKDIM - 1; j++)
             {
-                rhs_reg[BLOCKDIM * c + j] = rhs_reg[BLOCKDIM * c + j] - w_reg[j] * x1 - v_reg[j] * x2;
+                rhs_reg[BLOCKDIM * c + j]
+                    = rhs_reg[BLOCKDIM * c + j] - w_reg[j] * x1 - v_reg[j] * x2;
             }
         }
 
@@ -464,7 +468,7 @@ namespace rocsparse
             {
                 if((BLOCKDIM * tid + i) < m)
                 {
-                    X[BLOCKDIM * tid + i + m * (NCOLS * bid + c)] = rhs_reg[BLOCKDIM * c + i];
+                    B[BLOCKDIM * tid + i + m * (NCOLS * bid + c)] = rhs_reg[BLOCKDIM * c + i];
                 }
             }
         }

@@ -52,4 +52,19 @@ namespace rocsparse
             return ((bits[k >> 5] >> (k & 31)) & 1u) ? 2 : 1;
         }
     };
+
+    template <typename T>
+    ROCSPARSE_DEVICE_ILF bool bunch_kaufman_criterion(T ak_1, T ak_2, T bk, T bk_1, T ck, T ck_1)
+    {
+        const T kappa
+            = static_cast<T>(0.5) * (rocsparse::sqrt(static_cast<T>(5.0)) - static_cast<T>(1.0));
+
+        T sigma = static_cast<T>(0);
+        sigma   = rocsparse::max((rocsparse::abs(ak_1)), (rocsparse::abs(ak_2)));
+        sigma   = rocsparse::max((rocsparse::abs(bk_1)), sigma);
+        sigma   = rocsparse::max((rocsparse::abs(ck)), sigma);
+        sigma   = rocsparse::max((rocsparse::abs(ck_1)), sigma);
+
+        return rocsparse::abs(bk) * sigma >= kappa * rocsparse::abs(ak_1 * ck);
+    }
 }

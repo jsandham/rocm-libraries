@@ -33,7 +33,8 @@
 namespace rocsparse
 {
     template <uint32_t TILE_X, uint32_t TILE_Y, typename T>
-    ROCSPARSE_KERNEL(TILE_X * TILE_Y) void transpose_kernel(
+    ROCSPARSE_KERNEL(TILE_X* TILE_Y)
+    void transpose_kernel(
         int m, int n, int ldb, int ldx, const T* __restrict__ B, T* __restrict__ X)
     {
         for(int b = 0; b < n; b += TILE_Y * gridDim.y)
@@ -71,12 +72,13 @@ namespace rocsparse
     }
 
     template <uint32_t BLOCKSIZE, uint32_t BLOCKDIM, typename T>
-    ROCSPARSE_KERNEL(BLOCKSIZE) void solve_one_thread_per_system_kernel(int m,
-                                                    int n,
-                                                    const T* __restrict__ lower,
-                                                    const T* __restrict__ main,
-                                                    const T* __restrict__ upper,
-                                                    T* __restrict__ rhs)
+    ROCSPARSE_KERNEL(BLOCKSIZE)
+    void solve_one_thread_per_system_kernel(int m,
+                                            int n,
+                                            const T* __restrict__ lower,
+                                            const T* __restrict__ main,
+                                            const T* __restrict__ upper,
+                                            T* __restrict__ rhs)
     {
         static_assert(BLOCKDIM >= 2);
         static_assert(BLOCKDIM <= BLOCKSIZE);
@@ -200,11 +202,12 @@ namespace rocsparse
     }
 
     template <typename T>
-    ROCSPARSE_KERNEL(1) void LBMT_solve_mt_kernel(int m,
-                                        const T* __restrict__ lower,
-                                        const T* __restrict__ main,
-                                        const T* __restrict__ upper,
-                                        T* __restrict__ mt)
+    ROCSPARSE_KERNEL(1)
+    void LBMT_solve_mt_kernel(int m,
+                              const T* __restrict__ lower,
+                              const T* __restrict__ main,
+                              const T* __restrict__ upper,
+                              T* __restrict__ mt)
     {
         int k  = 0;
         T   bk = main[k];
@@ -263,13 +266,14 @@ namespace rocsparse
     }
 
     template <uint32_t BLOCKSIZE, uint32_t BLOCKDIM, typename T>
-    ROCSPARSE_KERNEL(BLOCKSIZE) void LBMT_solve_rhs_one_thread_per_system_kernel(int m,
-                                                                int n,
-                                                                const T* __restrict__ lower,
-                                                                const T* __restrict__ main,
-                                                                const T* __restrict__ upper,
-                                                                const T* __restrict__ mt,
-                                                                T* __restrict__ rhs)
+    ROCSPARSE_KERNEL(BLOCKSIZE)
+    void LBMT_solve_rhs_one_thread_per_system_kernel(int m,
+                                                     int n,
+                                                     const T* __restrict__ lower,
+                                                     const T* __restrict__ main,
+                                                     const T* __restrict__ upper,
+                                                     const T* __restrict__ mt,
+                                                     T* __restrict__ rhs)
     {
         static_assert(BLOCKDIM >= 2);
         static_assert(BLOCKDIM <= BLOCKSIZE);
