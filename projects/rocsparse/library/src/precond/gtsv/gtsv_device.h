@@ -334,6 +334,10 @@ namespace rocsparse
                 m, m_pad, w, v, load_pointer(B_pad, batch, m_pad), load_pointer(X, batch, ldb));
             __syncthreads();
         }
+
+        // The shared tile is still live above; synchronise before a caller looping
+        // over right-hand sides overwrites it.
+        __syncthreads();
     }
 
     template <typename T>

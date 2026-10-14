@@ -23,6 +23,7 @@
  * ************************************************************************ */
 
 #include "internal/precond/rocsparse_gtsv.h"
+#include "rocsparse_grid.hpp"
 #include "rocsparse_gtsv.hpp"
 #include "rocsparse_gtsv_spike_solver.hpp"
 #include "rocsparse_gtsv_spike_solver_small.hpp"
