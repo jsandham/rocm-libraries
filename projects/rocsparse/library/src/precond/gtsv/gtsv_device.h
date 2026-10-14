@@ -311,6 +311,10 @@ namespace rocsparse
                 static_cast<T>(0));
             __syncthreads();
         }
+
+        // The shared tile is still live above; synchronise before a caller looping
+        // over right-hand sides overwrites it.
+        __syncthreads();
     }
 
     template <uint32_t BLOCKSIZE, uint32_t BLOCKDIM, uint32_t PARTITIONS_PER_GROUP, typename T>

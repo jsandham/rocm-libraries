@@ -552,6 +552,8 @@ set(rocsparse_source
   src/precond/csrilu0/rocsparse_xcsrilu0_buffer_size.cpp
   src/precond/csrilu0/rocsparse_xcsrilu0_analysis.cpp
   #
+  src/precond/gtsv/rocsparse_gtsv_spike_solver.cpp
+  src/precond/gtsv/rocsparse_gtsv_spike_solver_small.cpp
   src/precond/gtsv/rocsparse_gtsv.cpp
   src/precond/gtsv/rocsparse_gtsv_no_pivot.cpp
   src/precond/gtsv/rocsparse_gtsv_no_pivot_strided_batch.cpp

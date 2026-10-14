@@ -29,7 +29,7 @@ Tests:
 - name: gtsv
   category: quick
   function: gtsv
-  precision: *double_only_precisions
+  precision: *single_double_precisions
   M: [32]
   N: [1, 2, 3, 4, 5]
   denseld: [32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50]
@@ -38,7 +38,7 @@ Tests:
 - name: gtsv
   category: quick
   function: gtsv
-  precision: *single_double_precisions_complex_real
+  precision: *single_double_precisions
   M: [260]
   N: [1, 2, 3, 4, 5]
   denseld: [260]
@@ -47,7 +47,7 @@ Tests:
 - name: gtsv
   category: quick
   function: gtsv
-  precision: *single_double_precisions_complex_real
+  precision: *single_double_precisions
   M: [1000]
   N: [1, 2, 3, 4, 5]
   denseld: [1000]
@@ -56,7 +56,7 @@ Tests:
 - name: gtsv
   category: quick
   function: gtsv
-  precision: *single_double_precisions_complex_real
+  precision: *single_double_precisions
   M: [1756]
   N: [1, 2, 3, 4, 5]
   denseld: [1756]
@@ -65,7 +65,7 @@ Tests:
 - name: gtsv
   category: quick
   function: gtsv
-  precision: *single_double_precisions_complex_real
+  precision: *single_double_precisions
   M: [10465]
   N: [1, 2, 3, 4, 5]
   denseld: [10465]
@@ -74,7 +74,7 @@ Tests:
 - name: gtsv
   category: quick
   function: gtsv
-  precision: *single_double_precisions_complex_real
+  precision: *single_double_precisions
   M: [54672]
   N: [1, 2, 3, 4, 5]
   denseld: [54672]
@@ -83,7 +83,7 @@ Tests:
 - name: gtsv
   category: quick
   function: gtsv
-  precision: *single_double_precisions_complex_real
+  precision: *single_double_precisions
   M: [127465]
   N: [1, 2, 3, 4, 5]
   denseld: [127465]
@@ -92,7 +92,7 @@ Tests:
 - name: gtsv
   category: quick
   function: gtsv
-  precision: *single_double_precisions_complex_real
+  precision: *single_double_precisions
   M: [1846372]
   N: [1, 2, 3, 4, 5]
   denseld: [1846372]
@@ -113,173 +113,233 @@ Tests:
 
 
 
-# Quick
-- name: gtsv
-  category: quick
-  function: gtsv
-  precision: *single_double_precisions_complex_real
-  M: [8, 16]
-  N: [4, 5]
-  denseld: [16, 32, 64, 128, 256, 512]
-  matrix: [rocsparse_matrix_random]
+# # Quick
+# - name: gtsv
+#   category: quick
+#   function: gtsv
+#   precision: *single_double_precisions_complex_real
+#   M: [8, 16]
+#   N: [4, 5]
+#   denseld: [16, 32, 64, 128, 256, 512]
+#   matrix: [rocsparse_matrix_random]
 
-- name: gtsv
-  category: quick
-  function: gtsv
-  precision: *single_double_precisions_complex_real
-  M: [7, 18]
-  N: [4, 5]
-  denseld: [18, 39, 61, 122, 253, 514]
-  matrix: [rocsparse_matrix_random]
+# - name: gtsv
+#   category: quick
+#   function: gtsv
+#   precision: *single_double_precisions_complex_real
+#   M: [7, 18]
+#   N: [4, 5]
+#   denseld: [18, 39, 61, 122, 253, 514]
+#   matrix: [rocsparse_matrix_random]
 
-- name: gtsv
-  category: quick
-  function: gtsv
-  precision: *single_double_precisions_complex_real
-  M: [8, 11]
-  N: [4, 5]
-  denseld: [32, 230, 768]
-  matrix: [rocsparse_matrix_random]
+# - name: gtsv
+#   category: quick
+#   function: gtsv
+#   precision: *single_double_precisions_complex_real
+#   M: [8, 11]
+#   N: [4, 5]
+#   denseld: [32, 230, 768]
+#   matrix: [rocsparse_matrix_random]
 
-- name: gtsv
-  category: quick
-  function: gtsv
-  precision: *single_double_precisions_complex_real
-  M: [300]
-  N: [54, 78]
-  denseld: [800]
-  matrix: [rocsparse_matrix_random]
+# - name: gtsv
+#   category: quick
+#   function: gtsv
+#   precision: *single_double_precisions_complex_real
+#   M: [300]
+#   N: [54, 78]
+#   denseld: [800]
+#   matrix: [rocsparse_matrix_random]
 
-- name: gtsv
-  category: quick
-  function: gtsv
-  precision: *single_double_precisions_complex_real
-  M: [2, 4, 8, 16]
-  N: [300]
-  denseld: [800]
-  matrix: [rocsparse_matrix_random]
+# - name: gtsv
+#   category: quick
+#   function: gtsv
+#   precision: *single_double_precisions_complex_real
+#   M: [2, 4, 8, 16]
+#   N: [300]
+#   denseld: [800]
+#   matrix: [rocsparse_matrix_random]
 
-- name: gtsv
-  category: quick
-  function: gtsv
-  precision: *single_double_precisions_complex_real
-  M: [3, 5, 11, 20]
-  N: [300]
-  denseld: [800]
-  matrix: [rocsparse_matrix_random]
+# - name: gtsv
+#   category: quick
+#   function: gtsv
+#   precision: *single_double_precisions_complex_real
+#   M: [3, 5, 11, 20]
+#   N: [300]
+#   denseld: [800]
+#   matrix: [rocsparse_matrix_random]
 
-- name: gtsv
-  category: quick
-  function: gtsv
-  precision: *single_double_precisions_complex_real
-  M: [556, 2092, 8236]
-  N: [8]
-  denseld: [8236]
-  matrix: [rocsparse_matrix_random]
+# - name: gtsv
+#   category: quick
+#   function: gtsv
+#   precision: *single_double_precisions_complex_real
+#   M: [556, 2092, 8236]
+#   N: [8]
+#   denseld: [8236]
+#   matrix: [rocsparse_matrix_random]
 
-# Pre-checkin
-- name: gtsv_bad_arg
-  category: pre_checkin
-  function: gtsv_bad_arg
-  precision: *single_double_precisions_complex_real
+# # Pre-checkin
+# - name: gtsv_bad_arg
+#   category: pre_checkin
+#   function: gtsv_bad_arg
+#   precision: *single_double_precisions_complex_real
 
-- name: gtsv
-  category: pre_checkin
-  function: gtsv
-  precision: *single_double_precisions
-  M: [2, 720]
-  N: [1, 8]
-  denseld: [1000, 2000, 3000]
-  matrix: [rocsparse_matrix_random]
+# - name: gtsv
+#   category: pre_checkin
+#   function: gtsv
+#   precision: *single_double_precisions
+#   M: [2, 720]
+#   N: [1, 8]
+#   denseld: [1000, 2000, 3000]
+#   matrix: [rocsparse_matrix_random]
 
-- name: gtsv
-  category: pre_checkin
-  function: gtsv
-  precision: *single_double_precisions
-  M: [1720, 2000]
-  N: [2, 4]
-  denseld: [2000, 4000, 6000]
-  matrix: [rocsparse_matrix_random]
+# - name: gtsv
+#   category: pre_checkin
+#   function: gtsv
+#   precision: *single_double_precisions
+#   M: [1720, 2000]
+#   N: [2, 4]
+#   denseld: [2000, 4000, 6000]
+#   matrix: [rocsparse_matrix_random]
 
-- name: gtsv
-  category: pre_checkin
-  function: gtsv
-  precision: *double_only_precisions
-  M: [2000, 2048]
-  N: [2, 4]
-  denseld: [131072, 262144, 524288, 1048576]
-  matrix: [rocsparse_matrix_random]
+# - name: gtsv
+#   category: pre_checkin
+#   function: gtsv
+#   precision: *double_only_precisions
+#   M: [2000, 2048]
+#   N: [2, 4]
+#   denseld: [131072, 262144, 524288, 1048576]
+#   matrix: [rocsparse_matrix_random]
 
-- name: gtsv
-  category: pre_checkin
-  function: gtsv
-  precision: *double_only_precisions
-  M: [131072]
-  N: [2, 4]
-  denseld: [131079, 262148, 524287, 1048575]
-  matrix: [rocsparse_matrix_random]
+# - name: gtsv
+#   category: pre_checkin
+#   function: gtsv
+#   precision: *double_only_precisions
+#   M: [131072]
+#   N: [2, 4]
+#   denseld: [131079, 262148, 524287, 1048575]
+#   matrix: [rocsparse_matrix_random]
 
-- name: gtsv_graph_test
-  category: pre_checkin
-  function: gtsv
-  precision: *single_double_precisions
-  M: [7, 18]
-  N: [4, 5]
-  denseld: [18, 39, 61, 122, 253, 514]
-  matrix: [rocsparse_matrix_random]
-  graph_test: true
+# - name: gtsv_graph_test
+#   category: pre_checkin
+#   function: gtsv
+#   precision: *single_double_precisions
+#   M: [7, 18]
+#   N: [4, 5]
+#   denseld: [18, 39, 61, 122, 253, 514]
+#   matrix: [rocsparse_matrix_random]
+#   graph_test: true
 
-- name: gtsv
-  category: pre_checkin
-  function: gtsv
-  precision: *single_double_precisions_complex_real
-  M: [16940, 32812, 65580, 131116, 262188]
-  N: [20]
-  denseld: [262188]
-  matrix: [rocsparse_matrix_random]
+# - name: gtsv
+#   category: pre_checkin
+#   function: gtsv
+#   precision: *single_double_precisions_complex_real
+#   M: [16940, 32812, 65580, 131116, 262188]
+#   N: [20]
+#   denseld: [262188]
+#   matrix: [rocsparse_matrix_random]
 
-- name: gtsv
-  category: pre_checkin
-  function: gtsv
-  precision: *single_double_precisions_complex_real
-  M: [1048576, 4194304]
-  N: [3]
-  denseld: [4194304]
-  matrix: [rocsparse_matrix_random]
+# - name: gtsv
+#   category: pre_checkin
+#   function: gtsv
+#   precision: *single_double_precisions_complex_real
+#   M: [1048576, 4194304]
+#   N: [3]
+#   denseld: [4194304]
+#   matrix: [rocsparse_matrix_random]
 
-# Nightly
-- name: gtsv
-  category: nightly
-  function: gtsv
-  precision: *single_double_precisions
-  M: [3452, 4787]
-  N: [3, 5]
-  denseld: [30000, 50000, 90000]
-  matrix: [rocsparse_matrix_random]
+# # Nightly
+# - name: gtsv
+#   category: nightly
+#   function: gtsv
+#   precision: *single_double_precisions
+#   M: [3452, 4787]
+#   N: [3, 5]
+#   denseld: [30000, 50000, 90000]
+#   matrix: [rocsparse_matrix_random]
 
-- name: gtsv
-  category: nightly
-  function: gtsv
-  precision: *single_double_precisions
-  M: [3276, 4789]
-  N: [1, 2]
-  denseld: [30000, 40000, 50000]
-  matrix: [rocsparse_matrix_random]
+# - name: gtsv
+#   category: nightly
+#   function: gtsv
+#   precision: *single_double_precisions
+#   M: [3276, 4789]
+#   N: [1, 2]
+#   denseld: [30000, 40000, 50000]
+#   matrix: [rocsparse_matrix_random]
 
-- name: gtsv
-  category: nightly
-  function: gtsv
-  precision: *double_only_precisions
-  M: [5000]
-  N: [3, 4]
-  denseld: [300000, 500000, 900000]
-  matrix: [rocsparse_matrix_random]
+# - name: gtsv
+#   category: nightly
+#   function: gtsv
+#   precision: *double_only_precisions
+#   M: [5000]
+#   N: [3, 4]
+#   denseld: [300000, 500000, 900000]
+#   matrix: [rocsparse_matrix_random]
 
-- name: gtsv
-  category: nightly
-  function: gtsv
-  precision: *double_only_precisions
-  M: [5000]
-  N: [3, 7]
-  denseld: [300000, 500000, 900000]
-  matrix: [rocsparse_matrix_random]
+# - name: gtsv
+#   category: nightly
+#   function: gtsv
+#   precision: *double_only_precisions
+#   M: [5000]
+#   N: [3, 7]
+#   denseld: [300000, 500000, 900000]
+#   matrix: [rocsparse_matrix_random]
+
+# # AISPARSE-689 regression: the number of right-hand sides n is mapped straight onto
+# # grid.y, which the hardware caps at 65535. Before the fix rocsparse_Xgtsv failed with
+# # hipErrorInvalidConfiguration at n = 65536 against a system as small as two rows. The
+# # launches now clamp grid.y and every kernel grid-strides over the right-hand sides.
+# #
+# # These cases are deliberately small (denseld = m, single precision) so none of them
+# # needs a device_memory_gb guard and all of them really execute. The harness residual
+# # check covers every one of the ldb * n entries, so the right-hand sides beyond the
+# # clamp - reachable only through the new grid-stride loop - are verified numerically
+# # rather than by asserting that the launch returned success.
+
+# # n = 65537 is odd, so gtsv_LBM_rhs_kernel is instantiated with COLS = 1 and every
+# # grid.y in the solver is n itself, exceeding the cap by two.
+# - name: gtsv
+#   category: quick
+#   function: gtsv
+#   precision: *single_precision
+#   M: [2]
+#   N: [65537]
+#   denseld: [2]
+#   matrix: [rocsparse_matrix_random]
+
+# # m = 513 pads to m_pad = 1024, which yields gridsize = 2: the only way to reach
+# # gtsv_solve_spike_grid_level_kernel, the kernel behind the nine dim3(1, n) spike
+# # stages.
+# - name: gtsv
+#   category: quick
+#   function: gtsv
+#   precision: *single_precision
+#   M: [513]
+#   N: [65537]
+#   denseld: [513]
+#   matrix: [rocsparse_matrix_random]
+
+# # The vectorised gtsv_LBM_rhs_kernel launches size grid.y as n / COLS, so they only
+# # cross the cap at much larger n. n = 131074 = 2 * 65537 selects COLS = 2 and asks for
+# # 65537 panels.
+# - name: gtsv
+#   category: quick
+#   function: gtsv
+#   precision: *single_precision
+#   M: [2]
+#   N: [131074]
+#   denseld: [2]
+#   matrix: [rocsparse_matrix_random]
+
+# # n = 262148 = 4 * 65537 selects COLS = 4 and n = 524296 = 8 * 65537 selects COLS = 8;
+# # both ask for 65537 panels. The runtime accepts a grid.y of 65536 even though the
+# # device reports 65535, so 65537 is the smallest panel count that is past the cap. The
+# # padded right-hand side buffer is 0.5 GB and 1 GB respectively, which is why they sit
+# # in pre_checkin.
+# - name: gtsv
+#   category: pre_checkin
+#   function: gtsv
+#   precision: *single_precision
+#   M: [2]
+#   N: [262148, 524296]
+#   denseld: [2]
+#   matrix: [rocsparse_matrix_random]

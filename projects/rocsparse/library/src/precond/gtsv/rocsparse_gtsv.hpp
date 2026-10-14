@@ -29,6 +29,42 @@
 
 namespace rocsparse
 {
+    // The block kernels index complete partitions of BLOCKDIM rows, so padding only
+    // has to reach the next multiple of BLOCKDIM. Power-of-two padding adds fully
+    // artificial partitions whose spike tips are zero.
+    inline int pad_to_blockdim(int m, int blockdim)
+    {
+        const int64_t value  = static_cast<int64_t>(m);
+        const int64_t padded = ((value + blockdim - 1) / blockdim) * blockdim;
+        return static_cast<int>(padded);
+    }
+
+    template <typename T>
+    struct gtsv_buffer_data
+    {
+        // Each level keeps two interface rows per BLOCKDIM-row partition. The leaf
+        // solver handles every reduced size up to BLOCKDIM, so six levels cover any
+        // m whose padded length fits in a 32-bit int.
+        static constexpr int MAX_RECURSION_LEVELS = 6;
+
+        static constexpr int BLOCKDIM = 32;
+
+        T* dl_pad[MAX_RECURSION_LEVELS];
+        T* d_pad[MAX_RECURSION_LEVELS];
+        T* du_pad[MAX_RECURSION_LEVELS];
+        T* B_pad[MAX_RECURSION_LEVELS];
+
+        T* w_pad[MAX_RECURSION_LEVELS];
+        T* v_pad[MAX_RECURSION_LEVELS];
+        T* mt_pad[MAX_RECURSION_LEVELS];
+
+        T* sl[MAX_RECURSION_LEVELS];
+        T* s[MAX_RECURSION_LEVELS];
+        T* su[MAX_RECURSION_LEVELS];
+        T* sB[MAX_RECURSION_LEVELS];
+    };
+
+
     template <typename T>
     rocsparse_status gtsv_buffer_size_template(rocsparse_handle handle,
                                                rocsparse_int    m,
