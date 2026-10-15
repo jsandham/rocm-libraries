@@ -101,6 +101,11 @@ rocsparse_status rocsparse::gtsv_buffer_size_template(rocsparse_handle handle,
         *buffer_size += align_size<T>(S_size); // su
         *buffer_size += align_size<T>(S_size * n); // sB
 
+        if(level == 0)
+        {
+            *buffer_size += align_size<T>(gtsv_buffer_data<T>::FUSED_V2_FACTOR_SIZE); // factor_pad
+        }
+
         current_m = S_size;
     }
 
@@ -190,6 +195,13 @@ rocsparse_status rocsparse::gtsv_template(rocsparse_handle handle,
         data.sB[level] = reinterpret_cast<T*>(ptr);
         ptr += align_size<T>(S_size * n);
 
+        data.factor_pad[level] = nullptr;
+        if(level == 0)
+        {
+            data.factor_pad[level] = reinterpret_cast<T*>(ptr);
+            ptr += align_size<T>(gtsv_buffer_data<T>::FUSED_V2_FACTOR_SIZE);
+        }
+
         current_m = S_size;
     }
 
@@ -207,7 +219,8 @@ rocsparse_status rocsparse::gtsv_template(rocsparse_handle handle,
             data.d_pad, //main_pad,
             data.du_pad, //upper_pad,
             data.B_pad,
-            data.mt_pad)));
+            data.mt_pad,
+            data.factor_pad)));
     }
     else
     {

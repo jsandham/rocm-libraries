@@ -22,6 +22,7 @@
  *
  * ************************************************************************ */
 
+#include <cstdlib>
 #include <map>
 #include <vector>
 
@@ -168,16 +169,141 @@ namespace rocsparse
         return rocsparse_status_success;
     }
 
+    // Version 2 of the fused solver: factor once, then apply to the right hand sides.
+    template <uint32_t BLOCKSIZE, uint32_t BLOCKDIM, typename T>
+    static rocsparse_status launch_solve_fused_factor_v2(rocsparse_handle handle,
+                                                         rocsparse_int    m,
+                                                         const T* __restrict__ dl,
+                                                         const T* __restrict__ d,
+                                                         const T* __restrict__ du,
+                                                         T* __restrict__ factors)
+    {
+        ROCSPARSE_ROUTINE_TRACE;
+
+        static_assert(fused_v2_layout<BLOCKSIZE, BLOCKDIM>::size
+                      <= gtsv_buffer_data<T>::FUSED_V2_FACTOR_SIZE);
+
+        RETURN_IF_HIPLAUNCHKERNELGGL_ERROR(
+            (rocsparse::solve_fused_factor_kernel_v2<BLOCKSIZE, BLOCKDIM>),
+            1,
+            BLOCKSIZE,
+            0,
+            handle->stream,
+            m,
+            dl,
+            d,
+            du,
+            factors);
+        return rocsparse_status_success;
+    }
+
+    template <uint32_t BLOCKSIZE, uint32_t BLOCKDIM, uint32_t NCOLS, typename T>
+    static rocsparse_status launch_solve_fused_v2(rocsparse_handle handle,
+                                                  rocsparse_int    m,
+                                                  rocsparse_int    n,
+                                                  rocsparse_int    ldb,
+                                                  const T* __restrict__ factors,
+                                                  T* __restrict__ B)
+    {
+        ROCSPARSE_ROUTINE_TRACE;
+
+        RETURN_IF_HIPLAUNCHKERNELGGL_ERROR(
+            (rocsparse::solve_fused_kernel_v2<BLOCKSIZE, BLOCKDIM, NCOLS>),
+            n / NCOLS,
+            BLOCKSIZE,
+            0,
+            handle->stream,
+            m,
+            ldb,
+            factors,
+            B);
+        return rocsparse_status_success;
+    }
+
+    // Number of right hand sides handled by each block in version 2. Each thread keeps
+    // NCOLS * BLOCKDIM values in registers. The values were tuned on gfx1201 by
+    // benchmarking n = 100000 columns.
+    template <uint32_t BLOCKDIM, typename T>
+    static constexpr uint32_t fused_v2_ncols()
+    {
+        if(BLOCKDIM >= 32)
+        {
+            return 2;
+        }
+        if(BLOCKDIM >= 16)
+        {
+            return (sizeof(T) <= 4) ? 2 : 4;
+        }
+        if(BLOCKDIM >= 8)
+        {
+            return (sizeof(T) <= 4) ? 4 : 8;
+        }
+        return 8;
+    }
+
+    template <uint32_t BLOCKSIZE, uint32_t BLOCKDIM, typename T>
+    static rocsparse_status tridiagonal_spike_solver_fused_v2(rocsparse_handle handle,
+                                                              rocsparse_int    m,
+                                                              rocsparse_int    n,
+                                                              rocsparse_int    ldb,
+                                                              const T* __restrict__ dl,
+                                                              const T* __restrict__ d,
+                                                              const T* __restrict__ du,
+                                                              T* __restrict__ B,
+                                                              T* __restrict__ factors)
+    {
+        ROCSPARSE_ROUTINE_TRACE;
+
+        constexpr rocsparse_int NCOLS = fused_v2_ncols<BLOCKDIM, T>();
+
+        RETURN_IF_ROCSPARSE_ERROR(
+            (launch_solve_fused_factor_v2<BLOCKSIZE, BLOCKDIM>(handle, m, dl, d, du, factors)));
+
+        if(n < 500)
+        {
+            RETURN_IF_ROCSPARSE_ERROR(
+                (launch_solve_fused_v2<BLOCKSIZE, BLOCKDIM, 1>(handle, m, n, ldb, factors, B)));
+        }
+        else
+        {
+            const rocsparse_int remainder = n % NCOLS;
+            const rocsparse_int nn        = n - remainder;
+
+            RETURN_IF_ROCSPARSE_ERROR((launch_solve_fused_v2<BLOCKSIZE, BLOCKDIM, NCOLS>(
+                handle, m, nn, ldb, factors, B)));
+
+            if(remainder > 0)
+            {
+                RETURN_IF_ROCSPARSE_ERROR((launch_solve_fused_v2<BLOCKSIZE, BLOCKDIM, 1>(
+                    handle, m, remainder, ldb, factors, B + static_cast<int64_t>(ldb) * nn)));
+            }
+        }
+        return rocsparse_status_success;
+    }
+
+    // Temporary switch for A/B testing: set ROCSPARSE_GTSV_FUSED_V2=1 to use version 2.
+    static bool gtsv_fused_v2_enabled()
+    {
+        const char* env = std::getenv("ROCSPARSE_GTSV_FUSED_V2");
+        return env != nullptr && env[0] != '\0' && env[0] != '0';
+    }
+
     template <uint32_t BLOCKSIZE, uint32_t BLOCKDIM, typename T>
     static rocsparse_status tridiagonal_spike_solver_fused(rocsparse_handle handle,
                                                            rocsparse_int    m,
                                                            rocsparse_int    n,
+                                                           rocsparse_int    ldb,
                                                            const T* __restrict__ dl,
                                                            const T* __restrict__ d,
                                                            const T* __restrict__ du,
-                                                           T* __restrict__ B)
+                                                           T* __restrict__ B,
+                                                           T* __restrict__ factors)
     {
         ROCSPARSE_ROUTINE_TRACE;
+
+        // Version 1 does not use ldb (it assumes ldb == m) nor the factor workspace.
+        (void)ldb;
+        (void)factors;
 
         if(n < 500)
         {
@@ -217,7 +343,8 @@ rocsparse_status rocsparse::gtsv_spike_solver_small_template(rocsparse_handle ha
                                                              T**              d_pad, //main_pad,
                                                              T**              du_pad, //upper_pad,
                                                              T**              B_pad,
-                                                             T**              mt_pad)
+                                                             T**              mt_pad,
+                                                             T**              factor_pad)
 {
     ROCSPARSE_ROUTINE_TRACE;
 
@@ -232,8 +359,15 @@ rocsparse_status rocsparse::gtsv_spike_solver_small_template(rocsparse_handle ha
                                                   T**,
                                                   T**,
                                                   rocsparse_int);
-    using solve_fused_launch_ptr = rocsparse_status (*)(
-        rocsparse_handle, rocsparse_int, rocsparse_int, const T*, const T*, const T*, T*);
+    using solve_fused_launch_ptr = rocsparse_status (*)(rocsparse_handle,
+                                                        rocsparse_int,
+                                                        rocsparse_int,
+                                                        rocsparse_int,
+                                                        const T*,
+                                                        const T*,
+                                                        const T*,
+                                                        T*,
+                                                        T*);
 
     static const std::map<rocsparse_int, solve_launch_ptr> solve_dispatch = {
         {4, tridiagonal_spike_solver_one_thread_per_system<256, 4>},
@@ -250,6 +384,15 @@ rocsparse_status rocsparse::gtsv_spike_solver_small_template(rocsparse_handle ha
         {1024, tridiagonal_spike_solver_fused<32, 32>},
     };
 
+    static const std::map<rocsparse_int, solve_fused_launch_ptr> solve_fused_v2_dispatch = {
+        {128, tridiagonal_spike_solver_fused_v2<32, 4>},
+        {256, tridiagonal_spike_solver_fused_v2<32, 8>},
+        {512, tridiagonal_spike_solver_fused_v2<32, 16>},
+        {1024, tridiagonal_spike_solver_fused_v2<32, 32>},
+    };
+
+    static const bool use_fused_v2 = gtsv_fused_v2_enabled();
+
     if(m <= 64)
     {
         auto dispatch_it = solve_dispatch.lower_bound(m);
@@ -265,10 +408,13 @@ rocsparse_status rocsparse::gtsv_spike_solver_small_template(rocsparse_handle ha
     }
     else
     {
-        auto dispatch_it = solve_fused_dispatch.lower_bound(m);
-        if(dispatch_it != solve_fused_dispatch.end())
+        const auto& fused_dispatch = use_fused_v2 ? solve_fused_v2_dispatch : solve_fused_dispatch;
+
+        auto dispatch_it = fused_dispatch.lower_bound(m);
+        if(dispatch_it != fused_dispatch.end())
         {
-            RETURN_IF_ROCSPARSE_ERROR(dispatch_it->second(handle, m, n, dl, d, du, B));
+            RETURN_IF_ROCSPARSE_ERROR(
+                dispatch_it->second(handle, m, n, ldb, dl, d, du, B, factor_pad[LEVEL]));
         }
         else
         {
@@ -295,7 +441,8 @@ rocsparse_status rocsparse::gtsv_spike_solver_small_template(rocsparse_handle ha
         T**              d_pad,                                                  \
         T**              du_pad,                                                 \
         T**              B_pad,                                                  \
-        T**              mt_pad);
+        T**              mt_pad,                                                 \
+        T**              factor_pad);
 
 INSTANTIATE(float);
 INSTANTIATE(double);
