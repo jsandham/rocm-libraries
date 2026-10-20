@@ -99,6 +99,7 @@ set(HIPSPARSE_TEST_SOURCES
     test_spgeam_csr.cpp
     test_spgemm_csr.cpp
     test_spgemmreuse_csr.cpp
+    test_spgemmreuse_csr_reuse_descr.cpp
     test_spmat_descr.cpp
     test_spmm_batched_coo.cpp
     test_spmm_batched_csc.cpp
@@ -221,6 +222,7 @@ set(HIPSPARSE_TEST_YAMLS
     rocm/test_spgeam_csr.yaml
     rocm/test_spgemm_csr.yaml
     rocm/test_spgemmreuse_csr.yaml
+    rocm/test_spgemmreuse_csr_reuse_descr.yaml
     rocm/test_spmm_batched_coo.yaml
     rocm/test_spmm_batched_csc.yaml
     rocm/test_spmm_batched_csr.yaml
