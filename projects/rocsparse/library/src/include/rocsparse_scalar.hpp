@@ -34,14 +34,56 @@ namespace rocsparse
         T                        value;
         const T*                 pointer;
         __forceinline__ __host__ const_host_device_scalar(const T* scalar)
-            : pointer(scalar){};
+            : pointer(scalar) {};
         __forceinline__ __host__ const_host_device_scalar(const T& scalar)
-            : value(scalar){};
+            : value(scalar) {};
         static __forceinline__ __device__ T zero()
         {
             return static_cast<T>(0);
         }
     };
+
+    // gfx1250 -O2 miscompiles a runtime ternary that reads both members of
+    // const_host_device_scalar<_Float16>. Each specialization reads one member,
+    // and noinline keeps -O2 from inlining both reads back into the caller.
+    template <bool IS_HOST_MODE, typename T>
+    __device__ __attribute__((noinline))
+    T load_const_host_device_scalar(const const_host_device_scalar<T>& scalar)
+    {
+        if constexpr(IS_HOST_MODE)
+        {
+            return scalar.value;
+        }
+        else
+        {
+            return *scalar.pointer;
+        }
+    }
+
+    template <typename T>
+    __forceinline__ __device__ T get_host_device_scalar(const const_host_device_scalar<T>& scalar,
+                                                        bool is_host_mode)
+    {
+        if(is_host_mode)
+        {
+            return load_const_host_device_scalar<true>(scalar);
+        }
+        else
+        {
+            return load_const_host_device_scalar<false>(scalar);
+        }
+    }
+
+    template <typename T>
+    __forceinline__ __device__ T get_host_device_scalar_if(
+        bool cond, const const_host_device_scalar<T>& scalar, bool is_host_mode)
+    {
+        if(!cond)
+        {
+            return const_host_device_scalar<T>::zero();
+        }
+        return get_host_device_scalar(scalar, is_host_mode);
+    }
 
     template <typename T>
     __forceinline__ __host__ rocsparse::const_host_device_scalar<T>
@@ -72,11 +114,10 @@ namespace rocsparse
     rocsparse::const_host_device_scalar<TYPE_> NAME_##_union
 
 #define ROCSPARSE_DEVICE_HOST_SCALAR_GET(NAME_) \
-    const auto NAME_ = (is_host_mode) ? NAME_##_union.value : *NAME_##_union.pointer
+    const auto NAME_ = rocsparse::get_host_device_scalar(NAME_##_union, is_host_mode)
 
-#define ROCSPARSE_DEVICE_HOST_SCALAR_GET_IF(COND_, NAME_)                                        \
-    const auto NAME_ = (COND_) ? ((is_host_mode) ? NAME_##_union.value : *NAME_##_union.pointer) \
-                               : NAME_##_union.zero()
+#define ROCSPARSE_DEVICE_HOST_SCALAR_GET_IF(COND_, NAME_) \
+    const auto NAME_ = rocsparse::get_host_device_scalar_if((COND_), NAME_##_union, is_host_mode)
 
 #define ROCSPARSE_SCALAR_HOST_DEVICE_ARGUMENT(POINTER_MODE_, S_) \
     rocsparse::to_const_host_device_scalar(POINTER_MODE_, S_)
@@ -85,9 +126,8 @@ namespace rocsparse
     rocsparse::to_permissive_const_host_device_scalar(POINTER_MODE_, S_)
 
 #define ROCSPARSE_SCALAR_HOST_DEVICE_GET(IS_POINTER_MODE_HOST_, NAME_) \
-    const auto NAME_ = (IS_POINTER_MODE_HOST_) ? NAME_##_union.value : *NAME_##_union.pointer
+    const auto NAME_ = rocsparse::get_host_device_scalar(NAME_##_union, (IS_POINTER_MODE_HOST_))
 
-#define ROCSPARSE_SCALAR_HOST_DEVICE_GET_IF(COND_, IS_POINTER_MODE_HOST_, NAME_)             \
-    const auto NAME_                                                                         \
-        = (COND_) ? ((IS_POINTER_MODE_HOST_) ? NAME_##_union.value : *NAME_##_union.pointer) \
-                  : NAME_##_union.zero()
+#define ROCSPARSE_SCALAR_HOST_DEVICE_GET_IF(COND_, IS_POINTER_MODE_HOST_, NAME_) \
+    const auto NAME_                                                             \
+        = rocsparse::get_host_device_scalar_if((COND_), NAME_##_union, (IS_POINTER_MODE_HOST_))
