@@ -477,6 +477,123 @@ namespace rocsparse
         }
     }
 
+    // csrmvn_general_device extended to a fixed number of B columns in NT layout.
+    // Each lane keeps one accumulator per column (T sum[COL]) and walks the row once.
+    template <uint32_t BLOCKSIZE,
+              uint32_t WF_SIZE,
+              uint32_t COL,
+              typename T,
+              typename I,
+              typename J,
+              typename A,
+              typename B,
+              typename C>
+    ROCSPARSE_DEVICE_ILF void csrmmnt_row_split_general_device(T    alpha,
+                                                               T    beta,
+                                                               bool conj_A,
+                                                               bool conj_B,
+                                                               J    col_start,
+                                                               J    M,
+                                                               const I* __restrict__ csr_row_ptr,
+                                                               const J* __restrict__ csr_col_ind,
+                                                               const A* __restrict__ csr_val,
+                                                               const B* __restrict__ dense_B,
+                                                               int64_t ldb,
+                                                               C* __restrict__ dense_C,
+                                                               int64_t              ldc,
+                                                               rocsparse_order      order_C,
+                                                               rocsparse_index_base idx_base)
+    {
+        static_assert(WF_SIZE > 0 && (WF_SIZE & (WF_SIZE - 1)) == 0,
+                      "WF_SIZE must be a power of two.");
+        static_assert(BLOCKSIZE > 0, "BLOCKSIZE must be positive.");
+        static_assert(BLOCKSIZE % WF_SIZE == 0, "BLOCKSIZE must be a multiple of WF_SIZE.");
+        static_assert(COL > 0, "COL must be positive.");
+
+        const int lid = hipThreadIdx_x & (WF_SIZE - 1);
+
+        const J gid = hipBlockIdx_x * BLOCKSIZE + hipThreadIdx_x;
+        const J row = gid / WF_SIZE;
+
+        if(row >= M)
+        {
+            return;
+        }
+
+        const I row_start = csr_row_ptr[row] - idx_base;
+        const I row_end   = csr_row_ptr[row + 1] - idx_base;
+
+        T sum[COL]{};
+
+        // Loop over non-zero elements. Each lane accumulates every B column.
+        for(I j = row_start + lid; j < row_end; j += WF_SIZE)
+        {
+            const J  col_k = csr_col_ind[j] - idx_base;
+            const T  val   = static_cast<T>(rocsparse::conj_val(csr_val[j], conj_A));
+            const B* b_k   = dense_B + (static_cast<int64_t>(col_k) * ldb + col_start);
+
+#pragma unroll
+            for(uint32_t p = 0; p < COL; p++)
+            {
+                sum[p] = rocsparse::fma<T>(
+                    val,
+                    static_cast<T>(rocsparse::conj_val(rocsparse::ldg(b_k + p), conj_B)),
+                    sum[p]);
+            }
+        }
+
+#pragma unroll
+        for(uint32_t p = 0; p < COL; p++)
+        {
+            sum[p] = rocsparse::wfreduce_sum<WF_SIZE>(sum[p]);
+        }
+
+        // Last lane of the wavefront writes the row result.
+        if(lid == WF_SIZE - 1)
+        {
+            if(beta == static_cast<T>(0))
+            {
+                if(order_C == rocsparse_order_column)
+                {
+#pragma unroll
+                    for(uint32_t p = 0; p < COL; p++)
+                    {
+                        dense_C[row + (col_start + p) * ldc] = alpha * sum[p];
+                    }
+                }
+                else
+                {
+#pragma unroll
+                    for(uint32_t p = 0; p < COL; p++)
+                    {
+                        dense_C[row * ldc + (col_start + p)] = alpha * sum[p];
+                    }
+                }
+            }
+            else
+            {
+                if(order_C == rocsparse_order_column)
+                {
+#pragma unroll
+                    for(uint32_t p = 0; p < COL; p++)
+                    {
+                        dense_C[row + (col_start + p) * ldc] = rocsparse::fma<T>(
+                            beta, dense_C[row + (col_start + p) * ldc], alpha * sum[p]);
+                    }
+                }
+                else
+                {
+#pragma unroll
+                    for(uint32_t p = 0; p < COL; p++)
+                    {
+                        dense_C[row * ldc + (col_start + p)] = rocsparse::fma<T>(
+                            beta, dense_C[row * ldc + (col_start + p)], alpha * sum[p]);
+                    }
+                }
+            }
+        }
+    }
+
     template <typename T, uint32_t WFSIZE>
     ROCSPARSE_DEVICE_ILF void device_partial_sum(T* sum){};
 

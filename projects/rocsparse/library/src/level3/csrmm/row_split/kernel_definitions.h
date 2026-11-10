@@ -246,6 +246,67 @@ namespace rocsparse
 
     template <uint32_t BLOCKSIZE,
               uint32_t WF_SIZE,
+              uint32_t COL,
+              typename T,
+              typename I,
+              typename J,
+              typename A,
+              typename B,
+              typename C>
+    __launch_bounds__(BLOCKSIZE) __global__
+        void csrmmnt_row_split_general_kernel(ROCSPARSE_DEVICE_HOST_SCALAR_PARAMS(T, alpha),
+                                              ROCSPARSE_DEVICE_HOST_SCALAR_PARAMS(T, beta),
+                                              bool                 is_host_mode,
+                                              bool                 conj_A,
+                                              bool                 conj_B,
+                                              J                    col_start,
+                                              J                    m,
+                                              int64_t              batch_count,
+                                              int64_t              offsets_batch_stride_A,
+                                              int64_t              columns_values_batch_stride_A,
+                                              const I*             csr_row_ptr,
+                                              const J*             csr_col_ind,
+                                              const A*             csr_val,
+                                              const B*             dense_B,
+                                              int64_t              ldb,
+                                              int64_t              batch_stride_B,
+                                              C*                   dense_C,
+                                              int64_t              ldc,
+                                              int64_t              batch_stride_C,
+                                              rocsparse_order      order_C,
+                                              rocsparse_index_base idx_base)
+    {
+        ROCSPARSE_DEVICE_HOST_SCALAR_GET(alpha);
+        ROCSPARSE_DEVICE_HOST_SCALAR_GET(beta);
+        if(alpha == 0 && beta == 1)
+        {
+            return;
+        }
+
+        // Grid-stride loop over the batch dimension (grid y).
+        for(int64_t batch = hipBlockIdx_y; batch < batch_count; batch += hipGridDim_y)
+        {
+            rocsparse::csrmmnt_row_split_general_device<BLOCKSIZE, WF_SIZE, COL>(
+                alpha,
+                beta,
+                conj_A,
+                conj_B,
+                col_start,
+                m,
+                load_pointer(csr_row_ptr, batch, offsets_batch_stride_A),
+                load_pointer(csr_col_ind, batch, columns_values_batch_stride_A),
+                load_pointer(csr_val, batch, columns_values_batch_stride_A),
+                load_pointer(dense_B, batch, batch_stride_B),
+                ldb,
+                load_pointer(dense_C, batch, batch_stride_C),
+                ldc,
+                order_C,
+                idx_base);
+        }
+    }
+
+    template <uint32_t BLOCKSIZE,
+              uint32_t WF_SIZE,
               typename T,
               typename I,
               typename J,
@@ -900,6 +961,389 @@ namespace rocsparse
     CSRMMNT_ROW_SPLIT_SHARED_REMAINDER_KERNEL(T, I, J, A, B, C, 256, 8, 8)
 #define CSRMMNT_ROW_SPLIT_SHARED_REMAINDER_256_16_16(T, I, J, A, B, C) \
     CSRMMNT_ROW_SPLIT_SHARED_REMAINDER_KERNEL(T, I, J, A, B, C, 256, 16, 16)
+
+#define CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, BLOCKSIZE, WFSIZE, COL) \
+    template __launch_bounds__(BLOCKSIZE) __global__ void                          \
+        rocsparse::csrmmnt_row_split_general_kernel<BLOCKSIZE, WFSIZE, COL>(       \
+            ROCSPARSE_DEVICE_HOST_SCALAR_PARAMS(T, alpha),                         \
+            ROCSPARSE_DEVICE_HOST_SCALAR_PARAMS(T, beta),                          \
+            bool                 is_host_mode,                                     \
+            bool                 conj_A,                                           \
+            bool                 conj_B,                                           \
+            J                    col_start,                                        \
+            J                    m,                                                \
+            int64_t              batch_count,                                      \
+            int64_t              offsets_batch_stride_A,                           \
+            int64_t              columns_values_batch_stride_A,                    \
+            const I*             csr_row_ptr,                                      \
+            const J*             csr_col_ind,                                      \
+            const A*             csr_val,                                          \
+            const B*             dense_B,                                          \
+            int64_t              ldb,                                              \
+            int64_t              batch_stride_B,                                   \
+            C*                   dense_C,                                          \
+            int64_t              ldc,                                              \
+            int64_t              batch_stride_C,                                   \
+            rocsparse_order      order_C,                                          \
+            rocsparse_index_base idx_base);
+
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_32_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 32, 1)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_32_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 32, 2)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_32_3(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 32, 3)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_32_4(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 32, 4)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_32_5(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 32, 5)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_32_6(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 32, 6)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_32_7(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 32, 7)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_32_8(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 32, 8)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_32_9(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 32, 9)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_32_10(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 32, 10)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_32_11(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 32, 11)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_32_12(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 32, 12)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_32_13(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 32, 13)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_32_14(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 32, 14)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_32_15(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 32, 15)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_32_16(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 32, 16)
+
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_256_8_8_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_256_8_8_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_256_8_8_3(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 3)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_256_8_8_4(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 4)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_256_8_8_5(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 5)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_256_8_8_6(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 6)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_256_8_8_7(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 7)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_256_8_8_8(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 8)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_8_8_2_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 2, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_8_8_2_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 2, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_8_8_2_4(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 2, 4)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_8_8_3_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 3, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_8_8_3_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 3, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_8_8_3_4(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 3, 4)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_8_8_4_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 4, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_8_8_4_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 4, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_8_8_4_4(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 4, 4)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_8_8_5_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 5, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_8_8_5_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 5, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_8_8_5_4(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 5, 4)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_8_8_6_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 6, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_8_8_6_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 6, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_8_8_6_4(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 6, 4)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_8_8_7_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 7, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_8_8_7_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 7, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_8_8_7_4(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 8, 8, 7, 4)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_8_8_2_2_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                             \
+        T, I, J, A, B, C, 256, 8, 8, 2, 2, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_8_8_2_4_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                             \
+        T, I, J, A, B, C, 256, 8, 8, 2, 4, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_8_8_2_4_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                             \
+        T, I, J, A, B, C, 256, 8, 8, 2, 4, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_8_8_3_2_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                             \
+        T, I, J, A, B, C, 256, 8, 8, 3, 2, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_8_8_3_4_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                             \
+        T, I, J, A, B, C, 256, 8, 8, 3, 4, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_8_8_3_4_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                             \
+        T, I, J, A, B, C, 256, 8, 8, 3, 4, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_8_8_4_2_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                             \
+        T, I, J, A, B, C, 256, 8, 8, 4, 2, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_8_8_4_4_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                             \
+        T, I, J, A, B, C, 256, 8, 8, 4, 4, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_8_8_4_4_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                             \
+        T, I, J, A, B, C, 256, 8, 8, 4, 4, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_8_8_5_2_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                             \
+        T, I, J, A, B, C, 256, 8, 8, 5, 2, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_8_8_5_4_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                             \
+        T, I, J, A, B, C, 256, 8, 8, 5, 4, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_8_8_5_4_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                             \
+        T, I, J, A, B, C, 256, 8, 8, 5, 4, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_8_8_6_2_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                             \
+        T, I, J, A, B, C, 256, 8, 8, 6, 2, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_8_8_6_4_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                             \
+        T, I, J, A, B, C, 256, 8, 8, 6, 4, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_8_8_6_4_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                             \
+        T, I, J, A, B, C, 256, 8, 8, 6, 4, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_8_8_7_2_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                             \
+        T, I, J, A, B, C, 256, 8, 8, 7, 2, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_8_8_7_4_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                             \
+        T, I, J, A, B, C, 256, 8, 8, 7, 4, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_8_8_7_4_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                             \
+        T, I, J, A, B, C, 256, 8, 8, 7, 4, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_SWF3_COLUMNS_256_8_8_2_4_2_1( \
+    T, I, J, A, B, C)                                                                   \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_SWF3_COLUMNS_KERNEL(              \
+        T, I, J, A, B, C, 256, 8, 8, 2, 4, 2, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_SWF3_COLUMNS_256_8_8_3_4_2_1( \
+    T, I, J, A, B, C)                                                                   \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_SWF3_COLUMNS_KERNEL(              \
+        T, I, J, A, B, C, 256, 8, 8, 3, 4, 2, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_SWF3_COLUMNS_256_8_8_4_4_2_1( \
+    T, I, J, A, B, C)                                                                   \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_SWF3_COLUMNS_KERNEL(              \
+        T, I, J, A, B, C, 256, 8, 8, 4, 4, 2, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_SWF3_COLUMNS_256_8_8_5_4_2_1( \
+    T, I, J, A, B, C)                                                                   \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_SWF3_COLUMNS_KERNEL(              \
+        T, I, J, A, B, C, 256, 8, 8, 5, 4, 2, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_SWF3_COLUMNS_256_8_8_6_4_2_1( \
+    T, I, J, A, B, C)                                                                   \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_SWF3_COLUMNS_KERNEL(              \
+        T, I, J, A, B, C, 256, 8, 8, 6, 4, 2, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_SWF3_COLUMNS_256_8_8_7_4_2_1( \
+    T, I, J, A, B, C)                                                                   \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_SWF3_COLUMNS_KERNEL(              \
+        T, I, J, A, B, C, 256, 8, 8, 7, 4, 2, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_256_32_8_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_256_32_8_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_256_32_8_3(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 3)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_256_32_8_4(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 4)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_256_32_8_5(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 5)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_256_32_8_6(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 6)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_256_32_8_7(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 7)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_256_32_8_8(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 8)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_32_8_2_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 2, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_32_8_2_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 2, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_32_8_2_4(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 2, 4)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_32_8_3_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 3, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_32_8_3_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 3, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_32_8_3_4(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 3, 4)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_32_8_4_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 4, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_32_8_4_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 4, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_32_8_4_4(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 4, 4)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_32_8_5_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 5, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_32_8_5_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 5, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_32_8_5_4(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 5, 4)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_32_8_6_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 6, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_32_8_6_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 6, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_32_8_6_4(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 6, 4)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_32_8_7_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 7, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_32_8_7_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 7, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_256_32_8_7_4(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_COLUMNS_KERNEL(T, I, J, A, B, C, 256, 32, 8, 7, 4)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_32_8_2_2_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                              \
+        T, I, J, A, B, C, 256, 32, 8, 2, 2, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_32_8_2_4_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                              \
+        T, I, J, A, B, C, 256, 32, 8, 2, 4, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_32_8_2_4_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                              \
+        T, I, J, A, B, C, 256, 32, 8, 2, 4, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_32_8_3_2_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                              \
+        T, I, J, A, B, C, 256, 32, 8, 3, 2, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_32_8_3_4_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                              \
+        T, I, J, A, B, C, 256, 32, 8, 3, 4, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_32_8_3_4_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                              \
+        T, I, J, A, B, C, 256, 32, 8, 3, 4, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_32_8_4_2_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                              \
+        T, I, J, A, B, C, 256, 32, 8, 4, 2, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_32_8_4_4_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                              \
+        T, I, J, A, B, C, 256, 32, 8, 4, 4, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_32_8_4_4_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                              \
+        T, I, J, A, B, C, 256, 32, 8, 4, 4, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_32_8_5_2_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                              \
+        T, I, J, A, B, C, 256, 32, 8, 5, 2, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_32_8_5_4_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                              \
+        T, I, J, A, B, C, 256, 32, 8, 5, 4, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_32_8_5_4_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                              \
+        T, I, J, A, B, C, 256, 32, 8, 5, 4, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_32_8_6_2_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                              \
+        T, I, J, A, B, C, 256, 32, 8, 6, 2, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_32_8_6_4_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                              \
+        T, I, J, A, B, C, 256, 32, 8, 6, 4, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_32_8_6_4_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                              \
+        T, I, J, A, B, C, 256, 32, 8, 6, 4, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_32_8_7_2_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                              \
+        T, I, J, A, B, C, 256, 32, 8, 7, 2, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_32_8_7_4_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                              \
+        T, I, J, A, B, C, 256, 32, 8, 7, 4, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_256_32_8_7_4_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_COLUMNS_KERNEL(                              \
+        T, I, J, A, B, C, 256, 32, 8, 7, 4, 2)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_SWF3_COLUMNS_256_32_8_2_4_2_1( \
+    T, I, J, A, B, C)                                                                    \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_SWF3_COLUMNS_KERNEL(               \
+        T, I, J, A, B, C, 256, 32, 8, 2, 4, 2, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_SWF3_COLUMNS_256_32_8_3_4_2_1( \
+    T, I, J, A, B, C)                                                                    \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_SWF3_COLUMNS_KERNEL(               \
+        T, I, J, A, B, C, 256, 32, 8, 3, 4, 2, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_SWF3_COLUMNS_256_32_8_4_4_2_1( \
+    T, I, J, A, B, C)                                                                    \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_SWF3_COLUMNS_KERNEL(               \
+        T, I, J, A, B, C, 256, 32, 8, 4, 4, 2, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_SWF3_COLUMNS_256_32_8_5_4_2_1( \
+    T, I, J, A, B, C)                                                                    \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_SWF3_COLUMNS_KERNEL(               \
+        T, I, J, A, B, C, 256, 32, 8, 5, 4, 2, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_SWF3_COLUMNS_256_32_8_6_4_2_1( \
+    T, I, J, A, B, C)                                                                    \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_SWF3_COLUMNS_KERNEL(               \
+        T, I, J, A, B, C, 256, 32, 8, 6, 4, 2, 1)
+#define CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_SWF3_COLUMNS_256_32_8_7_4_2_1( \
+    T, I, J, A, B, C)                                                                    \
+    CSRMMNT_ROW_SPLIT_SUBWFSIZE_X_LOOP_PLUS_SWF1_SWF2_SWF3_COLUMNS_KERNEL(               \
+        T, I, J, A, B, C, 256, 32, 8, 7, 4, 2, 1)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_8_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 8, 1)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_8_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 8, 2)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_8_3(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 8, 3)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_8_4(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 8, 4)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_8_5(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 8, 5)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_8_6(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 8, 6)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_8_7(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 8, 7)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_8_8(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 8, 8)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_8_9(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 8, 9)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_8_10(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 8, 10)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_8_11(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 8, 11)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_8_12(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 8, 12)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_8_13(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 8, 13)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_8_14(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 8, 14)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_8_15(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 8, 15)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_8_16(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 8, 16)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_16_1(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 16, 1)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_16_2(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 16, 2)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_16_3(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 16, 3)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_16_4(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 16, 4)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_16_5(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 16, 5)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_16_6(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 16, 6)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_16_7(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 16, 7)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_16_8(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 16, 8)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_16_9(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 16, 9)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_16_10(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 16, 10)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_16_11(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 16, 11)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_16_12(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 16, 12)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_16_13(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 16, 13)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_16_14(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 16, 14)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_16_15(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 16, 15)
+#define CSRMMNT_ROW_SPLIT_GENERAL_256_16_16(T, I, J, A, B, C) \
+    CSRMMNT_ROW_SPLIT_GENERAL_KERNEL(T, I, J, A, B, C, 256, 16, 16)
 
 #define CSRMMNN_ROW_SPLIT_256_8_1(T, I, J, A, B, C) \
     CSRMMNN_ROW_SPLIT_KERNEL(T, I, J, A, B, C, 256, 8, 1)
