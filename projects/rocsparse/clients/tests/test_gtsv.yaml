@@ -26,41 +26,85 @@ include: rocsparse_common.yaml
 
 
 Tests:
-# Quick
 - name: gtsv
   category: quick
   function: gtsv
-  precision: *single_double_precisions_complex_real
-  M: [2]
-  N: [4]
-  denseld: [2]
+  precision: *single_double_precisions
+  M: [32]
+  N: [1, 2, 3, 4, 5]
+  denseld: [32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50]
+  matrix: [rocsparse_matrix_random]
+
+- name: gtsv
+  category: quick
+  function: gtsv
+  precision: *single_double_precisions
+  M: [260]
+  N: [1, 2, 3, 4, 5]
+  denseld: [260]
+  matrix: [rocsparse_matrix_random]
+
+- name: gtsv
+  category: quick
+  function: gtsv
+  precision: *single_double_precisions
+  M: [1000]
+  N: [1, 2, 3, 4, 5]
+  denseld: [1000]
+  matrix: [rocsparse_matrix_random]
+
+- name: gtsv
+  category: quick
+  function: gtsv
+  precision: *single_double_precisions
+  M: [1756]
+  N: [1, 2, 3, 4, 5]
+  denseld: [1756]
+  matrix: [rocsparse_matrix_random]
+
+- name: gtsv
+  category: quick
+  function: gtsv
+  precision: *single_double_precisions
+  M: [10465]
+  N: [1, 2, 3, 4, 5]
+  denseld: [10465]
+  matrix: [rocsparse_matrix_random]
+
+- name: gtsv
+  category: quick
+  function: gtsv
+  precision: *single_double_precisions
+  M: [54672]
+  N: [1, 2, 3, 4, 5]
+  denseld: [54672]
+  matrix: [rocsparse_matrix_random]
+
+- name: gtsv
+  category: quick
+  function: gtsv
+  precision: *single_double_precisions
+  M: [127465]
+  N: [1, 2, 3, 4, 5]
+  denseld: [127465]
+  matrix: [rocsparse_matrix_random]
+
+- name: gtsv
+  category: quick
+  function: gtsv
+  precision: *single_double_precisions
+  M: [1846372]
+  N: [1, 2, 3, 4, 5]
+  denseld: [1846372]
   matrix: [rocsparse_matrix_random]
 
 - name: gtsv
   category: quick
   function: gtsv
   precision: *single_only_precisions
-  M: [2049, 8193]
-  N: [8]
-  denseld: [8193]
-  matrix: [rocsparse_matrix_random]
-
-- name: gtsv
-  category: quick
-  function: gtsv
-  precision: *single_only_precisions
-  M: [4097]
-  N: [1]
-  denseld: [4097]
-  matrix: [rocsparse_matrix_random]
-
-- name: gtsv
-  category: quick
-  function: gtsv
-  precision: *single_only_precisions
-  M: [1048577]
-  N: [1]
-  denseld: [1048577]
+  M: [16000000, 17000000, 18000000, 19000000, 20000000]
+  N: [1, 2, 3, 4, 5]
+  denseld: [20000000]
   matrix: [rocsparse_matrix_random]
 
 # AISPARSE-689 regression: the number of right-hand sides n is mapped straight onto

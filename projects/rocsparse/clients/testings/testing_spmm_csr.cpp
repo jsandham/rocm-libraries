@@ -118,6 +118,8 @@ void testing_spmm_csr(const Arguments& arg)
     rocsparse_int        ld_multiplier_B = arg.ld_multiplier_B;
     rocsparse_int        ld_multiplier_C = arg.ld_multiplier_C;
 
+    std::cout << "M: " << M << " N: " << N << " K: " << K << std::endl;
+
     T halpha = arg.get_alpha<T>();
     T hbeta  = arg.get_beta<T>();
 

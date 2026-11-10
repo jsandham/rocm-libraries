@@ -290,16 +290,29 @@ void near_check_general_template(int64_t            M,
     {
         for(int64_t i = 0; i < M; ++i)
         {
-            T compare_val = std::max(rocsparse_abs(A[i + j * LDA] * tol),
+            const T a_val = A[i + j * LDA];
+            const T b_val = B[i + j * LDB];
+            if(rocsparse_isnan(a_val) || rocsparse_isnan(b_val))
+            {
+                if(!(rocsparse_isnan(a_val) && rocsparse_isnan(b_val)))
+                {
+                    if(passed)
+                    {
+                        std::cerr.precision(12);
+                        std::cerr << "ASSERT_NEAR(" << a_val << ", " << b_val << ") failed: NaN"
+                                  << std::endl;
+                    }
+                    passed = false;
+                }
+                continue;
+            }
+
+            T compare_val = std::max(rocsparse_abs(a_val * tol),
                                      static_cast<T>(10) * std::numeric_limits<T>::epsilon());
 #ifdef GOOGLE_TEST
-            if(rocsparse_isnan(A[i + j * LDA]))
+            if(rocsparse_isinf(a_val))
             {
-                ASSERT_TRUE(rocsparse_isnan(B[i + j * LDB]));
-            }
-            else if(rocsparse_isinf(A[i + j * LDA]))
-            {
-                ASSERT_TRUE(rocsparse_isinf(B[i + j * LDB]));
+                ASSERT_TRUE(rocsparse_isinf(b_val));
             }
             else
 #endif
@@ -307,8 +320,7 @@ void near_check_general_template(int64_t            M,
                 int k;
                 for(k = 1; k <= MAX_TOL_MULTIPLIER; ++k)
                 {
-                    if(rocsparse_abs(A[i + j * LDA] - B[i + j * LDB])
-                       <= compare_val * static_cast<T>(k))
+                    if(rocsparse_abs(a_val - b_val) <= compare_val * static_cast<T>(k))
                     {
                         break;
                     }
@@ -316,24 +328,23 @@ void near_check_general_template(int64_t            M,
 
                 if(k > MAX_TOL_MULTIPLIER)
                 {
-                    if(rocsparse_abs(A[i + j * LDA] - B[i + j * LDB]) > compare_val)
+                    if(rocsparse_abs(a_val - b_val) > compare_val)
                     {
                         if(passed)
                         {
                             std::cerr.precision(12);
-                            std::cerr
-                                << "ASSERT_NEAR(" << A[i + j * LDA] << ", " << B[i + j * LDB]
-                                << ") failed: " << rocsparse_abs(A[i + j * LDA] - B[i + j * LDB])
-                                << " exceeds permissive range [" << compare_val << ","
-                                << compare_val * static_cast<T>(MAX_TOL_MULTIPLIER) << " ]"
-                                << std::endl;
+                            std::cerr << "ASSERT_NEAR(" << a_val << ", " << b_val
+                                      << ") failed: " << rocsparse_abs(a_val - b_val)
+                                      << " exceeds permissive range [" << compare_val << ","
+                                      << compare_val * static_cast<T>(MAX_TOL_MULTIPLIER) << " ]"
+                                      << std::endl;
                         }
 
-                        min_passing_tol = std::max(min_passing_tol,
-                                                   rocsparse_abs(A[i + j * LDA] - B[i + j * LDB])
-                                                       / std::max(rocsparse_abs(A[i + j * LDA]),
-                                                                  rocsparse_abs(B[i + j * LDB])));
-                        passed          = false;
+                        min_passing_tol
+                            = std::max(min_passing_tol,
+                                       rocsparse_abs(a_val - b_val)
+                                           / std::max(rocsparse_abs(a_val), rocsparse_abs(b_val)));
+                        passed = false;
                     }
                 }
                 tolm = std::max(tolm, k);
@@ -374,16 +385,29 @@ void near_check_general_template(int64_t                        M,
     {
         for(int64_t i = 0; i < M; ++i)
         {
-            float compare_val = std::max(rocsparse_abs(A[i + j * LDA]) * tol,
+            const rocsparse_float_complex a_val = A[i + j * LDA];
+            const rocsparse_float_complex b_val = B[i + j * LDB];
+            if(rocsparse_isnan(a_val) || rocsparse_isnan(b_val))
+            {
+                if(!(rocsparse_isnan(a_val) && rocsparse_isnan(b_val)))
+                {
+                    if(passed)
+                    {
+                        std::cerr.precision(16);
+                        std::cerr << "ASSERT_NEAR(" << a_val << ", " << b_val << ") failed: NaN"
+                                  << std::endl;
+                    }
+                    passed = false;
+                }
+                continue;
+            }
+
+            float compare_val = std::max(rocsparse_abs(a_val) * tol,
                                          10 * std::numeric_limits<float>::epsilon());
 #ifdef GOOGLE_TEST
-            if(rocsparse_isnan(A[i + j * LDA]))
+            if(rocsparse_isinf(a_val))
             {
-                ASSERT_TRUE(rocsparse_isnan(B[i + j * LDB]));
-            }
-            else if(rocsparse_isinf(A[i + j * LDA]))
-            {
-                ASSERT_TRUE(rocsparse_isinf(B[i + j * LDB]));
+                ASSERT_TRUE(rocsparse_isinf(b_val));
             }
             else
 #endif
@@ -391,7 +415,7 @@ void near_check_general_template(int64_t                        M,
                 int k;
                 for(k = 1; k <= MAX_TOL_MULTIPLIER; ++k)
                 {
-                    if(rocsparse_abs(A[i + j * LDA] - B[i + j * LDB]) <= compare_val * k)
+                    if(rocsparse_abs(a_val - b_val) <= compare_val * k)
                     {
                         break;
                     }
@@ -399,21 +423,20 @@ void near_check_general_template(int64_t                        M,
 
                 if(k > MAX_TOL_MULTIPLIER)
                 {
-                    if(rocsparse_abs(A[i + j * LDA] - B[i + j * LDB]) > compare_val)
+                    if(rocsparse_abs(a_val - b_val) > compare_val)
                     {
                         if(passed)
                         {
                             std::cerr.precision(16);
-                            std::cerr
-                                << "ASSERT_NEAR(" << A[i + j * LDA] << ", " << B[i + j * LDB]
-                                << ") failed: " << rocsparse_abs(A[i + j * LDA] - B[i + j * LDB])
-                                << " exceeds permissive range [" << compare_val << ","
-                                << compare_val * MAX_TOL_MULTIPLIER << " ]" << std::endl;
+                            std::cerr << "ASSERT_NEAR(" << a_val << ", " << b_val
+                                      << ") failed: " << rocsparse_abs(a_val - b_val)
+                                      << " exceeds permissive range [" << compare_val << ","
+                                      << compare_val * MAX_TOL_MULTIPLIER << " ]" << std::endl;
                         }
 
-                        float min_passing_tol_tmp = rocsparse_abs(A[i + j * LDA] - B[i + j * LDB])
-                                                    / std::max(rocsparse_abs(A[i + j * LDA]),
-                                                               rocsparse_abs(B[i + j * LDB]));
+                        float min_passing_tol_tmp
+                            = rocsparse_abs(a_val - b_val)
+                              / std::max(rocsparse_abs(a_val), rocsparse_abs(b_val));
 
                         min_passing_tol = std::max(min_passing_tol, min_passing_tol_tmp);
                         passed          = false;
@@ -457,16 +480,29 @@ void near_check_general_template(int64_t                         M,
     {
         for(int64_t i = 0; i < M; ++i)
         {
-            double compare_val = std::max(rocsparse_abs(A[i + j * LDA]) * tol,
-                                          10 * std::numeric_limits<double>::epsilon());
-#ifdef GOOGLE_TEST
-            if(rocsparse_isnan(A[i + j * LDA]))
+            const rocsparse_double_complex a_val = A[i + j * LDA];
+            const rocsparse_double_complex b_val = B[i + j * LDB];
+            if(rocsparse_isnan(a_val) || rocsparse_isnan(b_val))
             {
-                ASSERT_TRUE(rocsparse_isnan(B[i + j * LDB]));
+                if(!(rocsparse_isnan(a_val) && rocsparse_isnan(b_val)))
+                {
+                    if(passed)
+                    {
+                        std::cerr.precision(16);
+                        std::cerr << "ASSERT_NEAR(" << a_val << ", " << b_val << ") failed: NaN"
+                                  << std::endl;
+                    }
+                    passed = false;
+                }
+                continue;
             }
-            else if(rocsparse_isinf(A[i + j * LDA]))
+
+            double compare_val
+                = std::max(rocsparse_abs(a_val) * tol, 10 * std::numeric_limits<double>::epsilon());
+#ifdef GOOGLE_TEST
+            if(rocsparse_isinf(a_val))
             {
-                ASSERT_TRUE(rocsparse_isinf(B[i + j * LDB]));
+                ASSERT_TRUE(rocsparse_isinf(b_val));
             }
             else
 #endif
@@ -474,7 +510,7 @@ void near_check_general_template(int64_t                         M,
                 int k;
                 for(k = 1; k <= MAX_TOL_MULTIPLIER; ++k)
                 {
-                    if(rocsparse_abs(A[i + j * LDA] - B[i + j * LDB]) <= compare_val * k)
+                    if(rocsparse_abs(a_val - b_val) <= compare_val * k)
                     {
                         break;
                     }
@@ -482,21 +518,20 @@ void near_check_general_template(int64_t                         M,
 
                 if(k > MAX_TOL_MULTIPLIER)
                 {
-                    if(rocsparse_abs(A[i + j * LDA] - B[i + j * LDB]) > compare_val)
+                    if(rocsparse_abs(a_val - b_val) > compare_val)
                     {
                         if(passed)
                         {
                             std::cerr.precision(16);
-                            std::cerr
-                                << "ASSERT_NEAR(" << A[i + j * LDA] << ", " << B[i + j * LDB]
-                                << ") failed: " << rocsparse_abs(A[i + j * LDA] - B[i + j * LDB])
-                                << " exceeds permissive range [" << compare_val << ","
-                                << compare_val * MAX_TOL_MULTIPLIER << " ]" << std::endl;
+                            std::cerr << "ASSERT_NEAR(" << a_val << ", " << b_val
+                                      << ") failed: " << rocsparse_abs(a_val - b_val)
+                                      << " exceeds permissive range [" << compare_val << ","
+                                      << compare_val * MAX_TOL_MULTIPLIER << " ]" << std::endl;
                         }
 
-                        double min_passing_tol_tmp = rocsparse_abs(A[i + j * LDA] - B[i + j * LDB])
-                                                     / std::max(rocsparse_abs(A[i + j * LDA]),
-                                                                rocsparse_abs(B[i + j * LDB]));
+                        double min_passing_tol_tmp
+                            = rocsparse_abs(a_val - b_val)
+                              / std::max(rocsparse_abs(a_val), rocsparse_abs(b_val));
 
                         min_passing_tol = std::max(min_passing_tol, min_passing_tol_tmp);
                         passed          = false;
