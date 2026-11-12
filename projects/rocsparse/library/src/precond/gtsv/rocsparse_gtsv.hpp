@@ -42,9 +42,10 @@ namespace rocsparse
     template <typename T>
     struct gtsv_buffer_data
     {
-        // Each level keeps two interface rows per BLOCKDIM-row partition. The leaf
-        // solver handles every reduced size up to BLOCKDIM, so six levels cover any
-        // m whose padded length fits in a 32-bit int.
+        // Each level keeps two interface rows per BLOCKDIM-row partition. Recursion
+        // stops once the reduced system has at most 1024 rows and hands it to the
+        // small solver, so six levels cover any m whose padded length fits in a
+        // 32-bit int.
         static constexpr int MAX_RECURSION_LEVELS = 6;
 
         static constexpr int BLOCKDIM = 32;
@@ -58,7 +59,8 @@ namespace rocsparse
         T* v_pad[MAX_RECURSION_LEVELS];
         T* mt_pad[MAX_RECURSION_LEVELS];
 
-        // Only level 0 is allocated.
+        // Allocated at every level so the leaf small solver can use this level's
+        // workspace whichever level finishes the recursion.
         T*   scratch[MAX_RECURSION_LEVELS];
         int* mask[MAX_RECURSION_LEVELS];
 

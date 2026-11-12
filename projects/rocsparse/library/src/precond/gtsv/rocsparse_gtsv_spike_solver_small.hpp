@@ -26,7 +26,7 @@
 
 namespace rocsparse
 {
-    template <uint32_t LEVEL, typename T>
+    template <typename T>
     rocsparse_status gtsv_spike_solver_small_template(rocsparse_handle handle,
                                                       rocsparse_int    m,
                                                       rocsparse_int    n,
@@ -41,6 +41,7 @@ namespace rocsparse
                                                       T**              B_pad,
                                                       T**              mt_pad,
                                                       T**              scratch,
-                                                      int**            mask);
+                                                      int**            mask,
+                                                      rocsparse_int    level);
 
 }

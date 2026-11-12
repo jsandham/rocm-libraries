@@ -26,29 +26,8 @@
 
 namespace rocsparse
 {
-    template <uint32_t LEVEL, typename T>
+    template <typename T>
     rocsparse_status gtsv_spike_solver_template(rocsparse_handle handle,
-                                                        rocsparse_int    m,
-                                                        rocsparse_int    n,
-                                                        rocsparse_int    ldb,
-                                                        const T*         dl, //lower_diag,
-                                                        const T*         d, //main_diag,
-                                                        const T*         du, //upper_diag,
-                                                        T*               B,
-                                                        T**              dl_pad, //lower_pad,
-                                                        T**              d_pad, //main_pad,
-                                                        T**              du_pad, //upper_pad,
-                                                        T**              B_pad,
-                                                        T**              w_pad,
-                                                        T**              v_pad,
-                                                        T**              mt_pad,
-                                                        T**              sl, //S_lower,
-                                                        T**              s, //S_main,
-                                                        T**              su, //S_upper,
-                                                        T**              sB);
-
-    template <uint32_t LEVEL, typename T>
-    rocsparse_status gtsv_spike_solver_template2(rocsparse_handle handle,
                                                 rocsparse_int    m,
                                                 rocsparse_int    n,
                                                 rocsparse_int    ldb,
@@ -66,5 +45,30 @@ namespace rocsparse
                                                 T**              sl, //S_lower,
                                                 T**              s, //S_main,
                                                 T**              su, //S_upper,
-                                                T**              sB);
+                                                T**              sB,
+                                                T**              scratch,
+                                                int**            mask,
+                                                rocsparse_int    level);
+
+    // template <typename T>
+    // rocsparse_status gtsv_spike_solver_template2(rocsparse_handle handle,
+    //                                             rocsparse_int    m,
+    //                                             rocsparse_int    n,
+    //                                             rocsparse_int    ldb,
+    //                                             const T*         dl, //lower_diag,
+    //                                             const T*         d, //main_diag,
+    //                                             const T*         du, //upper_diag,
+    //                                             T*               B,
+    //                                             T**              dl_pad, //lower_pad,
+    //                                             T**              d_pad, //main_pad,
+    //                                             T**              du_pad, //upper_pad,
+    //                                             T**              B_pad,
+    //                                             T**              w_pad,
+    //                                             T**              v_pad,
+    //                                             T**              mt_pad,
+    //                                             T**              sl, //S_lower,
+    //                                             T**              s, //S_main,
+    //                                             T**              su, //S_upper,
+    //                                             T**              sB,
+    //                                             rocsparse_int    level);
 }

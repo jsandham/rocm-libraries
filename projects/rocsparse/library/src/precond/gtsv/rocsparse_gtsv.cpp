@@ -101,13 +101,10 @@ rocsparse_status rocsparse::gtsv_buffer_size_template(rocsparse_handle handle,
         *buffer_size += align_size<T>(S_size); // su
         *buffer_size += align_size<T>(S_size * n); // sB
 
-        if(level == 0)
-        {
-            // scratch
-            *buffer_size += align_size<T>(32 * 32 * 8 + 2 * 32 * 6);
-            // mask
-            *buffer_size += align_size<int>(32 * 2);
-        }
+        // scratch
+        *buffer_size += align_size<T>(32 * 32 * 8 + 2 * 32 * 6);
+        // mask
+        *buffer_size += align_size<int>(32 * 2);
 
         current_m = S_size;
     }
@@ -198,22 +195,17 @@ rocsparse_status rocsparse::gtsv_template(rocsparse_handle handle,
         data.sB[level] = reinterpret_cast<T*>(ptr);
         ptr += align_size<T>(S_size * n);
 
-        data.scratch[level] = nullptr;
-        data.mask[level]    = nullptr;
-        if(level == 0)
-        {
-            data.scratch[level] = reinterpret_cast<T*>(ptr);
-            ptr += align_size<T>(32 * 32 * 8 + 2 * 32 * 6);
-            data.mask[level] = reinterpret_cast<int*>(ptr);
-            ptr += align_size<int>(32 * 2);
-        }
+        data.scratch[level] = reinterpret_cast<T*>(ptr);
+        ptr += align_size<T>(32 * 32 * 8 + 2 * 32 * 6);
+        data.mask[level] = reinterpret_cast<int*>(ptr);
+        ptr += align_size<int>(32 * 2);
 
         current_m = S_size;
     }
 
     if(m <= 1024)
     {
-        RETURN_IF_ROCSPARSE_ERROR((gtsv_spike_solver_small_template<0>(handle,
+        RETURN_IF_ROCSPARSE_ERROR((gtsv_spike_solver_small_template<T>(handle,
                                                                        m,
                                                                        n,
                                                                        ldb,
@@ -227,11 +219,12 @@ rocsparse_status rocsparse::gtsv_template(rocsparse_handle handle,
                                                                        data.B_pad,
                                                                        data.mt_pad,
                                                                        data.scratch,
-                                                                       data.mask)));
+                                                                       data.mask,
+                                                                       0)));
     }
     else
     {
-        RETURN_IF_ROCSPARSE_ERROR((gtsv_spike_solver_template<0>(handle,
+        RETURN_IF_ROCSPARSE_ERROR((gtsv_spike_solver_template<T>(handle,
                                                                  m,
                                                                  n,
                                                                  ldb,
@@ -249,9 +242,12 @@ rocsparse_status rocsparse::gtsv_template(rocsparse_handle handle,
                                                                  data.sl, //S_lower,
                                                                  data.s, //S_main,
                                                                  data.su, //S_upper,
-                                                                 data.sB)));
+                                                                 data.sB,
+                                                                 data.scratch,
+                                                                 data.mask,
+                                                                 0)));
     }
-    // RETURN_IF_ROCSPARSE_ERROR((gtsv_spike_solver_template2<0>(handle,
+    // RETURN_IF_ROCSPARSE_ERROR((gtsv_spike_solver_template2<T>(handle,
     //                                                           m,
     //                                                           n,
     //                                                           ldb,
@@ -269,7 +265,8 @@ rocsparse_status rocsparse::gtsv_template(rocsparse_handle handle,
     //                                                           data.sl, //S_lower,
     //                                                           data.s, //S_main,
     //                                                           data.su, //S_upper,
-    //                                                           data.sB)));
+    //                                                           data.sB,
+    //                                                           0)));
 
     return rocsparse_status_success;
 }

@@ -126,21 +126,20 @@ namespace rocsparse
                                                                            const T* __restrict__ d,
                                                                            const T* __restrict__ du,
                                                                            T* __restrict__ B,
-                                                                           T**           B_pad,
-                                                                           T**           mt,
-                                                                           rocsparse_int level)
+                                                                           T* B_pad,
+                                                                           T* mt)
     {
         ROCSPARSE_ROUTINE_TRACE;
 
         // B is m by n with leading dimension ldb. The solve works on the transpose,
         // packed with leading dimension n, then the result is written back with ldb.
         RETURN_IF_ROCSPARSE_ERROR(
-            (launch_transpose<BLOCKSIZE, BLOCKDIM>(handle, m, n, ldb, n, B, B_pad[level])));
-        RETURN_IF_ROCSPARSE_ERROR(launch_LBMT_solve_mt(handle, m, dl, d, du, mt[level]));
+            (launch_transpose<BLOCKSIZE, BLOCKDIM>(handle, m, n, ldb, n, B, B_pad)));
+        RETURN_IF_ROCSPARSE_ERROR(launch_LBMT_solve_mt(handle, m, dl, d, du, mt));
         RETURN_IF_ROCSPARSE_ERROR((launch_LBMT_solve_rhs_one_thread_per_system<BLOCKSIZE, BLOCKDIM>(
-            handle, m, n, dl, d, du, mt[level], B_pad[level])));
+            handle, m, n, dl, d, du, mt, B_pad)));
         RETURN_IF_ROCSPARSE_ERROR(
-            (launch_transpose<BLOCKSIZE, BLOCKDIM>(handle, n, m, n, ldb, B_pad[level], B)));
+            (launch_transpose<BLOCKSIZE, BLOCKDIM>(handle, n, m, n, ldb, B_pad, B)));
         return rocsparse_status_success;
     }
 
@@ -409,7 +408,7 @@ namespace rocsparse
     }
 }
 
-template <uint32_t LEVEL, typename T>
+template <typename T>
 rocsparse_status rocsparse::gtsv_spike_solver_small_template(rocsparse_handle handle,
                                                              rocsparse_int    m,
                                                              rocsparse_int    n,
@@ -424,7 +423,8 @@ rocsparse_status rocsparse::gtsv_spike_solver_small_template(rocsparse_handle ha
                                                              T**              B_pad,
                                                              T**              mt_pad,
                                                              T**              scratch,
-                                                             int**            mask)
+                                                             int**            mask,
+                                                             rocsparse_int    level)
 {
     ROCSPARSE_ROUTINE_TRACE;
 
@@ -436,9 +436,8 @@ rocsparse_status rocsparse::gtsv_spike_solver_small_template(rocsparse_handle ha
                                                   const T*,
                                                   const T*,
                                                   T*,
-                                                  T**,
-                                                  T**,
-                                                  rocsparse_int);
+                                                  T*,
+                                                  T*);
 
     using solve_fused_launch_ptr = rocsparse_status (*)(rocsparse_handle,
                                                         rocsparse_int,
@@ -472,7 +471,7 @@ rocsparse_status rocsparse::gtsv_spike_solver_small_template(rocsparse_handle ha
         if(dispatch_it != solve_dispatch.end())
         {
             RETURN_IF_ROCSPARSE_ERROR(
-                dispatch_it->second(handle, m, n, ldb, dl, d, du, B, B_pad, mt_pad, LEVEL));
+                dispatch_it->second(handle, m, n, ldb, dl, d, du, B, B_pad[level], mt_pad[level]));
         }
         else
         {
@@ -485,7 +484,7 @@ rocsparse_status rocsparse::gtsv_spike_solver_small_template(rocsparse_handle ha
         if(dispatch_it != solve_fused_dispatch.end())
         {
             RETURN_IF_ROCSPARSE_ERROR(
-                dispatch_it->second(handle, m, n, ldb, dl, d, du, B, scratch[LEVEL], mask[LEVEL]));
+                dispatch_it->second(handle, m, n, ldb, dl, d, du, B, scratch[level], mask[level]));
         }
         else
         {
@@ -496,25 +495,24 @@ rocsparse_status rocsparse::gtsv_spike_solver_small_template(rocsparse_handle ha
     return rocsparse_status_success;
 }
 
-// Level 0 is the entry point from gtsv_template. Instantiating it also emits the
-// deeper levels, because each level calls the next one under if constexpr.
-#define INSTANTIATE(T)                                                           \
-    template rocsparse_status rocsparse::gtsv_spike_solver_small_template<0, T>( \
-        rocsparse_handle handle,                                                 \
-        rocsparse_int    m,                                                      \
-        rocsparse_int    n,                                                      \
-        rocsparse_int    ldb,                                                    \
-        const T*         dl,                                                     \
-        const T*         d,                                                      \
-        const T*         du,                                                     \
-        T*               B,                                                      \
-        T**              dl_pad,                                                 \
-        T**              d_pad,                                                  \
-        T**              du_pad,                                                 \
-        T**              B_pad,                                                  \
-        T**              mt_pad,                                                 \
-        T**              scratch,                                                \
-        int**            mask);
+#define INSTANTIATE(T)                                                        \
+    template rocsparse_status rocsparse::gtsv_spike_solver_small_template<T>( \
+        rocsparse_handle handle,                                              \
+        rocsparse_int    m,                                                   \
+        rocsparse_int    n,                                                   \
+        rocsparse_int    ldb,                                                 \
+        const T*         dl,                                                  \
+        const T*         d,                                                   \
+        const T*         du,                                                  \
+        T*               B,                                                   \
+        T**              dl_pad,                                              \
+        T**              d_pad,                                               \
+        T**              du_pad,                                              \
+        T**              B_pad,                                               \
+        T**              mt_pad,                                              \
+        T**              scratch,                                             \
+        int**            mask,                                                \
+        rocsparse_int    level);
 
 INSTANTIATE(float);
 INSTANTIATE(double);
