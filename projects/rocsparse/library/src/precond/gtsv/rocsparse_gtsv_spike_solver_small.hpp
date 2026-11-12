@@ -40,6 +40,7 @@ namespace rocsparse
                                                       T**              du_pad, //upper_pad,
                                                       T**              B_pad,
                                                       T**              mt_pad,
-                                                      T**              factor_pad);
+                                                      T**              scratch,
+                                                      int**            mask);
 
 }

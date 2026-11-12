@@ -49,11 +49,6 @@ namespace rocsparse
 
         static constexpr int BLOCKDIM = 32;
 
-        // Number of elements of T in the factorization workspace used by the fused
-        // small solver (version 2), which must be at least
-        // fused_v2_layout<32, 32>::size (8610).
-        static constexpr int FUSED_V2_FACTOR_SIZE = 8704;
-
         T* dl_pad[MAX_RECURSION_LEVELS];
         T* d_pad[MAX_RECURSION_LEVELS];
         T* du_pad[MAX_RECURSION_LEVELS];
@@ -64,14 +59,14 @@ namespace rocsparse
         T* mt_pad[MAX_RECURSION_LEVELS];
 
         // Only level 0 is allocated.
-        T* factor_pad[MAX_RECURSION_LEVELS];
+        T*   scratch[MAX_RECURSION_LEVELS];
+        int* mask[MAX_RECURSION_LEVELS];
 
         T* sl[MAX_RECURSION_LEVELS];
         T* s[MAX_RECURSION_LEVELS];
         T* su[MAX_RECURSION_LEVELS];
         T* sB[MAX_RECURSION_LEVELS];
     };
-
 
     template <typename T>
     rocsparse_status gtsv_buffer_size_template(rocsparse_handle handle,

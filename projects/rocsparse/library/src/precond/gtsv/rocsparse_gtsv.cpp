@@ -103,7 +103,10 @@ rocsparse_status rocsparse::gtsv_buffer_size_template(rocsparse_handle handle,
 
         if(level == 0)
         {
-            *buffer_size += align_size<T>(gtsv_buffer_data<T>::FUSED_V2_FACTOR_SIZE); // factor_pad
+            // scratch
+            *buffer_size += align_size<T>(32 * 32 * 8 + 2 * 32 * 6);
+            // mask
+            *buffer_size += align_size<int>(32 * 2);
         }
 
         current_m = S_size;
@@ -195,11 +198,14 @@ rocsparse_status rocsparse::gtsv_template(rocsparse_handle handle,
         data.sB[level] = reinterpret_cast<T*>(ptr);
         ptr += align_size<T>(S_size * n);
 
-        data.factor_pad[level] = nullptr;
+        data.scratch[level] = nullptr;
+        data.mask[level]    = nullptr;
         if(level == 0)
         {
-            data.factor_pad[level] = reinterpret_cast<T*>(ptr);
-            ptr += align_size<T>(gtsv_buffer_data<T>::FUSED_V2_FACTOR_SIZE);
+            data.scratch[level] = reinterpret_cast<T*>(ptr);
+            ptr += align_size<T>(32 * 32 * 8 + 2 * 32 * 6);
+            data.mask[level] = reinterpret_cast<int*>(ptr);
+            ptr += align_size<int>(32 * 2);
         }
 
         current_m = S_size;
@@ -208,41 +214,42 @@ rocsparse_status rocsparse::gtsv_template(rocsparse_handle handle,
     if(m <= 1024)
     {
         RETURN_IF_ROCSPARSE_ERROR((gtsv_spike_solver_small_template<0>(handle,
-            m,
-            n,
-            ldb,
-            dl, //lower_diag,
-            d, //main_diag,
-            du, //upper_diag,
-            B,
-            data.dl_pad, //lower_pad,
-            data.d_pad, //main_pad,
-            data.du_pad, //upper_pad,
-            data.B_pad,
-            data.mt_pad,
-            data.factor_pad)));
+                                                                       m,
+                                                                       n,
+                                                                       ldb,
+                                                                       dl, //lower_diag,
+                                                                       d, //main_diag,
+                                                                       du, //upper_diag,
+                                                                       B,
+                                                                       data.dl_pad, //lower_pad,
+                                                                       data.d_pad, //main_pad,
+                                                                       data.du_pad, //upper_pad,
+                                                                       data.B_pad,
+                                                                       data.mt_pad,
+                                                                       data.scratch,
+                                                                       data.mask)));
     }
     else
     {
         RETURN_IF_ROCSPARSE_ERROR((gtsv_spike_solver_template<0>(handle,
-            m,
-            n,
-            ldb,
-            dl, //lower_diag,
-            d, //main_diag,
-            du, //upper_diag,
-            B,
-            data.dl_pad, //lower_pad,
-            data.d_pad, //main_pad,
-            data.du_pad, //upper_pad,
-            data.B_pad,
-            data.w_pad,
-            data.v_pad,
-            data.mt_pad,
-            data.sl, //S_lower,
-            data.s, //S_main,
-            data.su, //S_upper,
-            data.sB)));
+                                                                 m,
+                                                                 n,
+                                                                 ldb,
+                                                                 dl, //lower_diag,
+                                                                 d, //main_diag,
+                                                                 du, //upper_diag,
+                                                                 B,
+                                                                 data.dl_pad, //lower_pad,
+                                                                 data.d_pad, //main_pad,
+                                                                 data.du_pad, //upper_pad,
+                                                                 data.B_pad,
+                                                                 data.w_pad,
+                                                                 data.v_pad,
+                                                                 data.mt_pad,
+                                                                 data.sl, //S_lower,
+                                                                 data.s, //S_main,
+                                                                 data.su, //S_upper,
+                                                                 data.sB)));
     }
     // RETURN_IF_ROCSPARSE_ERROR((gtsv_spike_solver_template2<0>(handle,
     //                                                           m,

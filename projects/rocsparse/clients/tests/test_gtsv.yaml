@@ -101,6 +101,15 @@ Tests:
 - name: gtsv
   category: quick
   function: gtsv
+  precision: *single_double_precisions
+  M: [1000]
+  N: [551]
+  denseld: [2000]
+  matrix: [rocsparse_matrix_random]
+
+- name: gtsv
+  category: quick
+  function: gtsv
   precision: *single_only_precisions
   M: [16000000, 17000000, 18000000, 19000000, 20000000]
   N: [1, 2, 3, 4, 5]
