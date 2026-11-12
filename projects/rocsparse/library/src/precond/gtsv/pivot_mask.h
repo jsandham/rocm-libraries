@@ -25,6 +25,7 @@
 #pragma once
 
 #include "rocsparse_common.hpp"
+#include "rocsparse_floating_data_t.hpp"
 
 namespace rocsparse
 {
@@ -56,14 +57,16 @@ namespace rocsparse
     template <typename T>
     ROCSPARSE_DEVICE_ILF bool bunch_kaufman_criterion(T ak_1, T ak_2, T bk, T bk_1, T ck, T ck_1)
     {
-        const T kappa
-            = static_cast<T>(0.5) * (rocsparse::sqrt(static_cast<T>(5.0)) - static_cast<T>(1.0));
+        // The pivot decision compares magnitudes, which are real even when T is complex.
+        using real_t = floating_data_t<T>;
 
-        T sigma = static_cast<T>(0);
-        sigma   = rocsparse::max((rocsparse::abs(ak_1)), (rocsparse::abs(ak_2)));
-        sigma   = rocsparse::max((rocsparse::abs(bk_1)), sigma);
-        sigma   = rocsparse::max((rocsparse::abs(ck)), sigma);
-        sigma   = rocsparse::max((rocsparse::abs(ck_1)), sigma);
+        const real_t kappa = static_cast<real_t>(0.5)
+                             * (rocsparse::sqrt(static_cast<real_t>(5.0)) - static_cast<real_t>(1.0));
+
+        real_t sigma = rocsparse::max(rocsparse::abs(ak_1), rocsparse::abs(ak_2));
+        sigma        = rocsparse::max(rocsparse::abs(bk_1), sigma);
+        sigma        = rocsparse::max(rocsparse::abs(ck), sigma);
+        sigma        = rocsparse::max(rocsparse::abs(ck_1), sigma);
 
         return rocsparse::abs(bk) * sigma >= kappa * rocsparse::abs(ak_1 * ck);
     }

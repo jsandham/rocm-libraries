@@ -660,9 +660,9 @@ namespace rocsparse
             rhs_reg[c][0]            = val_even;
             rhs_reg[c][BLOCKDIM - 1] = val_odd;
 
-            // backward solve (S * x = rhs)
-            const T tmp1 = __shfl_sync(0xFFFFFFFFULL, rhs_reg[c][BLOCKDIM - 1], tid - 1, BLOCKSIZE);
-            const T tmp2 = __shfl_sync(0xFFFFFFFFULL, rhs_reg[c][0], tid + 1, BLOCKSIZE);
+            // backward solve (S * x = rhs).
+            const T tmp1 = rocsparse::shfl_up(rhs_reg[c][BLOCKDIM - 1], 1, BLOCKSIZE);
+            const T tmp2 = rocsparse::shfl_down(rhs_reg[c][0], 1, BLOCKSIZE);
             x1[c]        = (tid >= 1) ? tmp1 : static_cast<T>(0);
             x2[c]        = (tid < (BLOCKSIZE - 1)) ? tmp2 : static_cast<T>(0);
         }

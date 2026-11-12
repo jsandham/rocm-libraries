@@ -25,6 +25,7 @@
 #pragma once
 
 #include "rocsparse_common.hpp"
+#include "rocsparse_floating_data_t.hpp"
 
 namespace rocsparse
 {
@@ -142,67 +143,44 @@ namespace rocsparse
     ROCSPARSE_DEVICE_ILF void data_transpose_device(
         int m, int m_pad, const T* __restrict__ d_in, T* __restrict__ d_out, T pad_value)
     {
-        // Each CUDA block handles PARTITIONS_PER_GROUP (e.g., 256) total partitions,
-        // but processes them in smaller chunks dictated by BLOCKSIZE (e.g., 128).
+        // Each block transposes one tile of PARTITIONS_PER_GROUP partitions. Small
+        // tiles give enough blocks to fill the GPU when the number of partitions is small.
+        static_assert((PARTITIONS_PER_GROUP * BLOCKDIM) % BLOCKSIZE == 0);
+
         const int group_start_partition = blockIdx.x * PARTITIONS_PER_GROUP;
         const int nblocks               = m_pad / BLOCKDIM;
 
-        // Prevent completely out-of-bounds blocks from executing
         if(group_start_partition >= nblocks)
             return;
 
-        // Shared memory now only needs to hold BLOCKSIZE partitions at a time (~33 KB)
-        __shared__ T smem[BLOCKSIZE][BLOCKDIM + 1];
+        __shared__ T smem[PARTITIONS_PER_GROUP][BLOCKDIM + 1];
 
         const int tid = threadIdx.x;
 
-        // Loop over the group in chunks of BLOCKSIZE (e.g., 0, then 128)
-        for(int chunk = 0; chunk < PARTITIONS_PER_GROUP; chunk += BLOCKSIZE)
+        // Coalesced read of the tile's contiguous rows from the original layout
+        for(int i = 0; i < (PARTITIONS_PER_GROUP * BLOCKDIM) / BLOCKSIZE; ++i)
         {
-            // ---------------------------------------------------------
-            // PHASE 1: Coalesced Read from Global -> Shared Memory
-            // ---------------------------------------------------------
-            for(int i = 0; i < BLOCKDIM; ++i)
+            const int linear_idx    = i * BLOCKSIZE + tid;
+            const int global_in_idx = group_start_partition * BLOCKDIM + linear_idx;
+
+            smem[linear_idx / BLOCKDIM][linear_idx % BLOCKDIM]
+                = (global_in_idx < m) ? d_in[global_in_idx] : pad_value;
+        }
+
+        __syncthreads();
+
+        // Coalesced write of each element row across the tile's partitions
+        for(int i = 0; i < (PARTITIONS_PER_GROUP * BLOCKDIM) / BLOCKSIZE; ++i)
+        {
+            const int linear_out       = i * BLOCKSIZE + tid;
+            const int partition_idx    = linear_out % PARTITIONS_PER_GROUP;
+            const int element_idx      = linear_out / PARTITIONS_PER_GROUP;
+            const int global_partition = group_start_partition + partition_idx;
+
+            if(global_partition < nblocks)
             {
-                int linear_idx    = i * BLOCKSIZE + tid;
-                int partition_idx = linear_idx / BLOCKDIM;
-                int element_idx   = linear_idx % BLOCKDIM;
-
-                // Offset the global read by the current chunk
-                int global_partition = group_start_partition + chunk + partition_idx;
-                int global_in_idx    = global_partition * BLOCKDIM + element_idx;
-
-                T val = pad_value;
-
-                if(global_partition < nblocks && global_in_idx < m)
-                {
-                    val = d_in[global_in_idx];
-                }
-
-                smem[partition_idx][element_idx] = val;
+                d_out[element_idx * nblocks + global_partition] = smem[partition_idx][element_idx];
             }
-
-            __syncthreads();
-
-            // ---------------------------------------------------------
-            // PHASE 2: Coalesced Write from Shared -> Global Memory
-            // ---------------------------------------------------------
-            for(int i = 0; i < BLOCKDIM; ++i)
-            {
-                int out_partition_idx = tid;
-                int out_element_idx   = i;
-
-                int linear_out
-                    = out_element_idx * nblocks + group_start_partition + chunk + out_partition_idx;
-
-                if(group_start_partition + chunk + out_partition_idx < nblocks)
-                {
-                    d_out[linear_out] = smem[out_partition_idx][out_element_idx];
-                }
-            }
-
-            // Synchronize before overwriting shared memory with the next chunk
-            __syncthreads();
         }
     }
 
@@ -285,15 +263,14 @@ namespace rocsparse
                                 T* __restrict__ main_pad,
                                 T* __restrict__ upper_pad)
     {
+        // blockIdx.y selects the diagonal: 0 = lower, 1 = main, 2 = upper.
+        const int diag = blockIdx.y;
+
+        const T* in  = (diag == 0) ? lower : ((diag == 1) ? main : upper);
+        T*       out = (diag == 0) ? lower_pad : ((diag == 1) ? main_pad : upper_pad);
+
         data_transpose_device<BLOCKSIZE, BLOCKDIM, PARTITIONS_PER_GROUP>(
-            m, m_pad, lower, lower_pad, static_cast<T>(0));
-        __syncthreads();
-        data_transpose_device<BLOCKSIZE, BLOCKDIM, PARTITIONS_PER_GROUP>(
-            m, m_pad, main, main_pad, static_cast<T>(1));
-        __syncthreads();
-        data_transpose_device<BLOCKSIZE, BLOCKDIM, PARTITIONS_PER_GROUP>(
-            m, m_pad, upper, upper_pad, static_cast<T>(0));
-        __syncthreads();
+            m, m_pad, in, out, (diag == 1) ? static_cast<T>(1) : static_cast<T>(0));
     }
 
     template <uint32_t BLOCKSIZE, uint32_t BLOCKDIM, uint32_t PARTITIONS_PER_GROUP, typename T>
@@ -343,14 +320,16 @@ namespace rocsparse
     template <typename T>
     ROCSPARSE_DEVICE_ILF bool bunch_kaufman_criterion(T ak_1, T ak_2, T bk, T bk_1, T ck, T ck_1)
     {
-        const T kappa
-            = static_cast<T>(0.5) * (rocsparse::sqrt(static_cast<T>(5.0)) - static_cast<T>(1.0));
+        // The pivot decision compares magnitudes, which are real even when T is complex.
+        using real_t = floating_data_t<T>;
 
-        T sigma = static_cast<T>(0);
-        sigma   = rocsparse::max((rocsparse::abs(ak_1)), (rocsparse::abs(ak_2)));
-        sigma   = rocsparse::max((rocsparse::abs(bk_1)), sigma);
-        sigma   = rocsparse::max((rocsparse::abs(ck)), sigma);
-        sigma   = rocsparse::max((rocsparse::abs(ck_1)), sigma);
+        const real_t kappa = static_cast<real_t>(0.5)
+                             * (rocsparse::sqrt(static_cast<real_t>(5.0)) - static_cast<real_t>(1.0));
+
+        real_t sigma = rocsparse::max(rocsparse::abs(ak_1), rocsparse::abs(ak_2));
+        sigma        = rocsparse::max(rocsparse::abs(bk_1), sigma);
+        sigma        = rocsparse::max(rocsparse::abs(ck), sigma);
+        sigma        = rocsparse::max(rocsparse::abs(ck_1), sigma);
 
         return rocsparse::abs(bk) * sigma >= kappa * rocsparse::abs(ak_1 * ck);
     }
@@ -983,66 +962,45 @@ namespace rocsparse
     ROCSPARSE_DEVICE_ILF void
         data_untranspose_device(int m, int m_pad, const T* __restrict__ d_in, T* __restrict__ d_out)
     {
-        // Each CUDA block handles PARTITIONS_PER_GROUP partitions,
-        // processed in smaller chunks dictated by BLOCKSIZE.
+        // Inverse of data_transpose_device: each block handles one tile of
+        // PARTITIONS_PER_GROUP partitions.
+        static_assert((PARTITIONS_PER_GROUP * BLOCKDIM) % BLOCKSIZE == 0);
+
         const int group_start_partition = blockIdx.x * PARTITIONS_PER_GROUP;
         const int nblocks               = m_pad / BLOCKDIM;
 
-        // Prevent completely out-of-bounds blocks from executing
         if(group_start_partition >= nblocks)
             return;
 
-        __shared__ T smem[BLOCKSIZE][BLOCKDIM + 1];
+        __shared__ T smem[PARTITIONS_PER_GROUP][BLOCKDIM + 1];
 
         const int tid = threadIdx.x;
 
-        // Loop over the group in chunks of BLOCKSIZE
-        for(int chunk = 0; chunk < PARTITIONS_PER_GROUP; chunk += BLOCKSIZE)
+        // Coalesced read of each element row across the tile's partitions
+        for(int i = 0; i < (PARTITIONS_PER_GROUP * BLOCKDIM) / BLOCKSIZE; ++i)
         {
-            // ---------------------------------------------------------
-            // PHASE 1: Coalesced Read from Padded Layout -> Shared Memory
-            // ---------------------------------------------------------
-            for(int i = 0; i < BLOCKDIM; ++i)
+            const int linear_in        = i * BLOCKSIZE + tid;
+            const int partition_idx    = linear_in % PARTITIONS_PER_GROUP;
+            const int element_idx      = linear_in / PARTITIONS_PER_GROUP;
+            const int global_partition = group_start_partition + partition_idx;
+
+            smem[partition_idx][element_idx] = (global_partition < nblocks)
+                                                   ? d_in[element_idx * nblocks + global_partition]
+                                                   : static_cast<T>(0);
+        }
+
+        __syncthreads();
+
+        // Coalesced write of the tile's contiguous rows. Padded rows past m are dropped.
+        for(int i = 0; i < (PARTITIONS_PER_GROUP * BLOCKDIM) / BLOCKSIZE; ++i)
+        {
+            const int linear_out     = i * BLOCKSIZE + tid;
+            const int global_out_idx = group_start_partition * BLOCKDIM + linear_out;
+
+            if(global_out_idx < m)
             {
-                int in_partition_idx = tid;
-                int in_element_idx   = i;
-
-                int linear_in
-                    = in_element_idx * nblocks + group_start_partition + chunk + in_partition_idx;
-
-                T val = T(0);
-                if(group_start_partition + chunk + in_partition_idx < nblocks)
-                {
-                    val = d_in[linear_in];
-                }
-
-                smem[in_partition_idx][in_element_idx] = val;
+                d_out[global_out_idx] = smem[linear_out / BLOCKDIM][linear_out % BLOCKDIM];
             }
-
-            __syncthreads();
-
-            // ---------------------------------------------------------
-            // PHASE 2: Coalesced Write from Shared -> Global Standard Memory
-            // ---------------------------------------------------------
-            for(int i = 0; i < BLOCKDIM; ++i)
-            {
-                int linear_out    = i * BLOCKSIZE + tid;
-                int partition_idx = linear_out / BLOCKDIM;
-                int element_idx   = linear_out % BLOCKDIM;
-
-                int global_partition = group_start_partition + chunk + partition_idx;
-                int global_out_idx   = global_partition * BLOCKDIM + element_idx;
-
-                // Only write back to the unpadded, original system size 'm'.
-                // The padded tail elements are naturally discarded.
-                if(global_partition < nblocks && global_out_idx < m)
-                {
-                    d_out[global_out_idx] = smem[partition_idx][element_idx];
-                }
-            }
-
-            // Synchronize before overwriting shared memory with the next chunk
-            __syncthreads();
         }
     }
 

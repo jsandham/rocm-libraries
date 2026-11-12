@@ -49,9 +49,10 @@ namespace rocsparse
 
         const int grid_size = (nblocks + PARTITIONS_PER_GROUP - 1) / PARTITIONS_PER_GROUP;
 
+        // One y-slice per diagonal
         RETURN_IF_HIPLAUNCHKERNELGGL_ERROR(
             (rocsparse::data_marshaling_kernel<BLOCKSIZE, BLOCKDIM, PARTITIONS_PER_GROUP>),
-            dim3(grid_size),
+            dim3(grid_size, 3),
             dim3(BLOCKSIZE),
             0,
             handle->stream,
@@ -562,10 +563,16 @@ rocsparse_status rocsparse::gtsv_spike_solver_template(rocsparse_handle handle,
 
     const int s_size = 2 * m_pad / BLOCKDIM;
 
-    RETURN_IF_ROCSPARSE_ERROR((launch_data_marshaling<128, BLOCKDIM, 256>(
-        handle, m, m_pad, dl, d, du, dl_pad[level], d_pad[level], du_pad[level])));
+    // Transpose tile shape: partitions per block and threads per block
+    static constexpr uint32_t MARSHAL_PARTITIONS = 32;
+    static constexpr uint32_t MARSHAL_BLOCKSIZE  = 256;
+
     RETURN_IF_ROCSPARSE_ERROR(
-        (launch_data_marshaling_B<128, BLOCKDIM, 256>(handle, m, m_pad, n, ldb, B, B_pad[level])));
+        (launch_data_marshaling<MARSHAL_BLOCKSIZE, BLOCKDIM, MARSHAL_PARTITIONS>(
+            handle, m, m_pad, dl, d, du, dl_pad[level], d_pad[level], du_pad[level])));
+    RETURN_IF_ROCSPARSE_ERROR(
+        (launch_data_marshaling_B<MARSHAL_BLOCKSIZE, BLOCKDIM, MARSHAL_PARTITIONS>(
+            handle, m, m_pad, n, ldb, B, B_pad[level])));
 
     RETURN_IF_HIP_ERROR(hipMemsetAsync(w_pad[level], 0, sizeof(T) * m_pad, handle->stream));
     RETURN_IF_HIP_ERROR(hipMemsetAsync(v_pad[level], 0, sizeof(T) * m_pad, handle->stream));
@@ -657,8 +664,9 @@ rocsparse_status rocsparse::gtsv_spike_solver_template(rocsparse_handle handle,
     RETURN_IF_ROCSPARSE_ERROR((launch_backward_solve<BLOCKSIZE, BLOCKDIM>(
         handle, m_pad, n, w_pad[level], v_pad[level], B_pad[level])));
 
-    RETURN_IF_ROCSPARSE_ERROR((launch_reverse_data_marshaling_B<128, BLOCKDIM, 256>(
-        handle, m, m_pad, n, ldb, B_pad[level], B)));
+    RETURN_IF_ROCSPARSE_ERROR(
+        (launch_reverse_data_marshaling_B<MARSHAL_BLOCKSIZE, BLOCKDIM, MARSHAL_PARTITIONS>(
+            handle, m, m_pad, n, ldb, B_pad[level], B)));
 
     return rocsparse_status_success;
 }
@@ -880,5 +888,7 @@ rocsparse_status rocsparse::gtsv_spike_solver_template(rocsparse_handle handle,
 
 INSTANTIATE(float);
 INSTANTIATE(double);
+INSTANTIATE(rocsparse_float_complex);
+INSTANTIATE(rocsparse_double_complex);
 
 #undef INSTANTIATE

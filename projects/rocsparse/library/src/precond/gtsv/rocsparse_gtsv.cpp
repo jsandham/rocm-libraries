@@ -276,222 +276,222 @@ rocsparse_status rocsparse::gtsv_template(rocsparse_handle handle,
  *    C wrapper
  * ===========================================================================
  */
-extern "C" rocsparse_status rocsparse_sgtsv_buffer_size(rocsparse_handle handle,
-                                                        rocsparse_int    m,
-                                                        rocsparse_int    n,
-                                                        const float*     dl,
-                                                        const float*     d,
-                                                        const float*     du,
-                                                        const float*     B,
-                                                        rocsparse_int    ldb,
-                                                        size_t*          buffer_size)
-try
-{
-    ROCSPARSE_ROUTINE_TRACE;
-    RETURN_IF_ROCSPARSE_ERROR(
-        rocsparse::gtsv_buffer_size_template(handle, m, n, dl, d, du, B, ldb, buffer_size));
-    return rocsparse_status_success;
-}
-catch(...)
-{
-    RETURN_ROCSPARSE_EXCEPTION();
-}
-extern "C" rocsparse_status rocsparse_dgtsv_buffer_size(rocsparse_handle handle,
-                                                        rocsparse_int    m,
-                                                        rocsparse_int    n,
-                                                        const double*    dl,
-                                                        const double*    d,
-                                                        const double*    du,
-                                                        const double*    B,
-                                                        rocsparse_int    ldb,
-                                                        size_t*          buffer_size)
-try
-{
-    ROCSPARSE_ROUTINE_TRACE;
-    RETURN_IF_ROCSPARSE_ERROR(
-        rocsparse::gtsv_buffer_size_template(handle, m, n, dl, d, du, B, ldb, buffer_size));
-    return rocsparse_status_success;
-}
-catch(...)
-{
-    RETURN_ROCSPARSE_EXCEPTION();
-}
-extern "C" rocsparse_status rocsparse_cgtsv_buffer_size(rocsparse_handle               handle,
-                                                        rocsparse_int                  m,
-                                                        rocsparse_int                  n,
-                                                        const rocsparse_float_complex* dl,
-                                                        const rocsparse_float_complex* d,
-                                                        const rocsparse_float_complex* du,
-                                                        const rocsparse_float_complex* B,
-                                                        rocsparse_int                  ldb,
-                                                        size_t*                        buffer_size)
-try
-{
-    // ROCSPARSE_ROUTINE_TRACE;
-    // RETURN_IF_ROCSPARSE_ERROR(
-    // rocsparse::gtsv_buffer_size_template(handle, m, n, dl, d, du, B, ldb, buffer_size));
-    return rocsparse_status_success;
-}
-catch(...)
-{
-    RETURN_ROCSPARSE_EXCEPTION();
-}
-extern "C" rocsparse_status rocsparse_zgtsv_buffer_size(rocsparse_handle                handle,
-                                                        rocsparse_int                   m,
-                                                        rocsparse_int                   n,
-                                                        const rocsparse_double_complex* dl,
-                                                        const rocsparse_double_complex* d,
-                                                        const rocsparse_double_complex* du,
-                                                        const rocsparse_double_complex* B,
-                                                        rocsparse_int                   ldb,
-                                                        size_t*                         buffer_size)
-try
-{
-    // ROCSPARSE_ROUTINE_TRACE;
-    // RETURN_IF_ROCSPARSE_ERROR(
-    // rocsparse::gtsv_buffer_size_template(handle, m, n, dl, d, du, B, ldb, buffer_size));
-    return rocsparse_status_success;
-}
-catch(...)
-{
-    RETURN_ROCSPARSE_EXCEPTION();
-}
+// extern "C" rocsparse_status rocsparse_sgtsv_buffer_size(rocsparse_handle handle,
+//                                                         rocsparse_int    m,
+//                                                         rocsparse_int    n,
+//                                                         const float*     dl,
+//                                                         const float*     d,
+//                                                         const float*     du,
+//                                                         const float*     B,
+//                                                         rocsparse_int    ldb,
+//                                                         size_t*          buffer_size)
+// try
+// {
+//     ROCSPARSE_ROUTINE_TRACE;
+//     RETURN_IF_ROCSPARSE_ERROR(
+//         rocsparse::gtsv_buffer_size_template(handle, m, n, dl, d, du, B, ldb, buffer_size));
+//     return rocsparse_status_success;
+// }
+// catch(...)
+// {
+//     RETURN_ROCSPARSE_EXCEPTION();
+// }
+// extern "C" rocsparse_status rocsparse_dgtsv_buffer_size(rocsparse_handle handle,
+//                                                         rocsparse_int    m,
+//                                                         rocsparse_int    n,
+//                                                         const double*    dl,
+//                                                         const double*    d,
+//                                                         const double*    du,
+//                                                         const double*    B,
+//                                                         rocsparse_int    ldb,
+//                                                         size_t*          buffer_size)
+// try
+// {
+//     ROCSPARSE_ROUTINE_TRACE;
+//     RETURN_IF_ROCSPARSE_ERROR(
+//         rocsparse::gtsv_buffer_size_template(handle, m, n, dl, d, du, B, ldb, buffer_size));
+//     return rocsparse_status_success;
+// }
+// catch(...)
+// {
+//     RETURN_ROCSPARSE_EXCEPTION();
+// }
+// extern "C" rocsparse_status rocsparse_cgtsv_buffer_size(rocsparse_handle               handle,
+//                                                         rocsparse_int                  m,
+//                                                         rocsparse_int                  n,
+//                                                         const rocsparse_float_complex* dl,
+//                                                         const rocsparse_float_complex* d,
+//                                                         const rocsparse_float_complex* du,
+//                                                         const rocsparse_float_complex* B,
+//                                                         rocsparse_int                  ldb,
+//                                                         size_t*                        buffer_size)
+// try
+// {
+//     // ROCSPARSE_ROUTINE_TRACE;
+//     // RETURN_IF_ROCSPARSE_ERROR(
+//     // rocsparse::gtsv_buffer_size_template(handle, m, n, dl, d, du, B, ldb, buffer_size));
+//     return rocsparse_status_success;
+// }
+// catch(...)
+// {
+//     RETURN_ROCSPARSE_EXCEPTION();
+// }
+// extern "C" rocsparse_status rocsparse_zgtsv_buffer_size(rocsparse_handle                handle,
+//                                                         rocsparse_int                   m,
+//                                                         rocsparse_int                   n,
+//                                                         const rocsparse_double_complex* dl,
+//                                                         const rocsparse_double_complex* d,
+//                                                         const rocsparse_double_complex* du,
+//                                                         const rocsparse_double_complex* B,
+//                                                         rocsparse_int                   ldb,
+//                                                         size_t*                         buffer_size)
+// try
+// {
+//     // ROCSPARSE_ROUTINE_TRACE;
+//     // RETURN_IF_ROCSPARSE_ERROR(
+//     // rocsparse::gtsv_buffer_size_template(handle, m, n, dl, d, du, B, ldb, buffer_size));
+//     return rocsparse_status_success;
+// }
+// catch(...)
+// {
+//     RETURN_ROCSPARSE_EXCEPTION();
+// }
 
-extern "C" rocsparse_status rocsparse_sgtsv(rocsparse_handle handle,
-                                            rocsparse_int    m,
-                                            rocsparse_int    n,
-                                            const float*     dl,
-                                            const float*     d,
-                                            const float*     du,
-                                            float*           B,
-                                            rocsparse_int    ldb,
-                                            void*            temp_buffer)
-try
-{
-    ROCSPARSE_ROUTINE_TRACE;
-    RETURN_IF_ROCSPARSE_ERROR(
-        rocsparse::gtsv_template(handle, m, n, dl, d, du, B, ldb, temp_buffer));
-    return rocsparse_status_success;
-}
-catch(...)
-{
-    RETURN_ROCSPARSE_EXCEPTION();
-}
-extern "C" rocsparse_status rocsparse_dgtsv(rocsparse_handle handle,
-                                            rocsparse_int    m,
-                                            rocsparse_int    n,
-                                            const double*    dl,
-                                            const double*    d,
-                                            const double*    du,
-                                            double*          B,
-                                            rocsparse_int    ldb,
-                                            void*            temp_buffer)
-try
-{
-    ROCSPARSE_ROUTINE_TRACE;
-    RETURN_IF_ROCSPARSE_ERROR(
-        rocsparse::gtsv_template(handle, m, n, dl, d, du, B, ldb, temp_buffer));
-    return rocsparse_status_success;
-}
-catch(...)
-{
-    RETURN_ROCSPARSE_EXCEPTION();
-}
-extern "C" rocsparse_status rocsparse_cgtsv(rocsparse_handle               handle,
-                                            rocsparse_int                  m,
-                                            rocsparse_int                  n,
-                                            const rocsparse_float_complex* dl,
-                                            const rocsparse_float_complex* d,
-                                            const rocsparse_float_complex* du,
-                                            rocsparse_float_complex*       B,
-                                            rocsparse_int                  ldb,
-                                            void*                          temp_buffer)
-try
-{
-    // ROCSPARSE_ROUTINE_TRACE;
-    // RETURN_IF_ROCSPARSE_ERROR(
-    // rocsparse::gtsv_template(handle, m, n, dl, d, du, B, ldb, temp_buffer));
-    return rocsparse_status_success;
-}
-catch(...)
-{
-    RETURN_ROCSPARSE_EXCEPTION();
-}
-extern "C" rocsparse_status rocsparse_zgtsv(rocsparse_handle                handle,
-                                            rocsparse_int                   m,
-                                            rocsparse_int                   n,
-                                            const rocsparse_double_complex* dl,
-                                            const rocsparse_double_complex* d,
-                                            const rocsparse_double_complex* du,
-                                            rocsparse_double_complex*       B,
-                                            rocsparse_int                   ldb,
-                                            void*                           temp_buffer)
-try
-{
-    // ROCSPARSE_ROUTINE_TRACE;
-    // RETURN_IF_ROCSPARSE_ERROR(
-    // rocsparse::gtsv_template(handle, m, n, dl, d, du, B, ldb, temp_buffer));
-    return rocsparse_status_success;
-}
-catch(...)
-{
-    RETURN_ROCSPARSE_EXCEPTION();
-}
+// extern "C" rocsparse_status rocsparse_sgtsv(rocsparse_handle handle,
+//                                             rocsparse_int    m,
+//                                             rocsparse_int    n,
+//                                             const float*     dl,
+//                                             const float*     d,
+//                                             const float*     du,
+//                                             float*           B,
+//                                             rocsparse_int    ldb,
+//                                             void*            temp_buffer)
+// try
+// {
+//     ROCSPARSE_ROUTINE_TRACE;
+//     RETURN_IF_ROCSPARSE_ERROR(
+//         rocsparse::gtsv_template(handle, m, n, dl, d, du, B, ldb, temp_buffer));
+//     return rocsparse_status_success;
+// }
+// catch(...)
+// {
+//     RETURN_ROCSPARSE_EXCEPTION();
+// }
+// extern "C" rocsparse_status rocsparse_dgtsv(rocsparse_handle handle,
+//                                             rocsparse_int    m,
+//                                             rocsparse_int    n,
+//                                             const double*    dl,
+//                                             const double*    d,
+//                                             const double*    du,
+//                                             double*          B,
+//                                             rocsparse_int    ldb,
+//                                             void*            temp_buffer)
+// try
+// {
+//     ROCSPARSE_ROUTINE_TRACE;
+//     RETURN_IF_ROCSPARSE_ERROR(
+//         rocsparse::gtsv_template(handle, m, n, dl, d, du, B, ldb, temp_buffer));
+//     return rocsparse_status_success;
+// }
+// catch(...)
+// {
+//     RETURN_ROCSPARSE_EXCEPTION();
+// }
+// extern "C" rocsparse_status rocsparse_cgtsv(rocsparse_handle               handle,
+//                                             rocsparse_int                  m,
+//                                             rocsparse_int                  n,
+//                                             const rocsparse_float_complex* dl,
+//                                             const rocsparse_float_complex* d,
+//                                             const rocsparse_float_complex* du,
+//                                             rocsparse_float_complex*       B,
+//                                             rocsparse_int                  ldb,
+//                                             void*                          temp_buffer)
+// try
+// {
+//     // ROCSPARSE_ROUTINE_TRACE;
+//     // RETURN_IF_ROCSPARSE_ERROR(
+//     // rocsparse::gtsv_template(handle, m, n, dl, d, du, B, ldb, temp_buffer));
+//     return rocsparse_status_success;
+// }
+// catch(...)
+// {
+//     RETURN_ROCSPARSE_EXCEPTION();
+// }
+// extern "C" rocsparse_status rocsparse_zgtsv(rocsparse_handle                handle,
+//                                             rocsparse_int                   m,
+//                                             rocsparse_int                   n,
+//                                             const rocsparse_double_complex* dl,
+//                                             const rocsparse_double_complex* d,
+//                                             const rocsparse_double_complex* du,
+//                                             rocsparse_double_complex*       B,
+//                                             rocsparse_int                   ldb,
+//                                             void*                           temp_buffer)
+// try
+// {
+//     // ROCSPARSE_ROUTINE_TRACE;
+//     // RETURN_IF_ROCSPARSE_ERROR(
+//     // rocsparse::gtsv_template(handle, m, n, dl, d, du, B, ldb, temp_buffer));
+//     return rocsparse_status_success;
+// }
+// catch(...)
+// {
+//     RETURN_ROCSPARSE_EXCEPTION();
+// }
 
-// #define C_IMPL(NAME, TYPE)                                                                       \
-//     extern "C" rocsparse_status NAME(rocsparse_handle handle,                                    \
-//                                      rocsparse_int    m,                                         \
-//                                      rocsparse_int    n,                                         \
-//                                      const TYPE*      dl,                                        \
-//                                      const TYPE*      d,                                         \
-//                                      const TYPE*      du,                                        \
-//                                      const TYPE*      B,                                         \
-//                                      rocsparse_int    ldb,                                       \
-//                                      size_t*          buffer_size)                               \
-//     try                                                                                          \
-//     {                                                                                            \
-//         ROCSPARSE_ROUTINE_TRACE;                                                                 \
-//         RETURN_IF_ROCSPARSE_ERROR(                                                               \
-//             rocsparse::gtsv_buffer_size_template(handle, m, n, dl, d, du, B, ldb, buffer_size)); \
-//         return rocsparse_status_success;                                                         \
-//     }                                                                                            \
-//     catch(...)                                                                                   \
-//     {                                                                                            \
-//         RETURN_ROCSPARSE_EXCEPTION();                                                            \
-//     }
+#define C_IMPL(NAME, TYPE)                                                                       \
+    extern "C" rocsparse_status NAME(rocsparse_handle handle,                                    \
+                                     rocsparse_int    m,                                         \
+                                     rocsparse_int    n,                                         \
+                                     const TYPE*      dl,                                        \
+                                     const TYPE*      d,                                         \
+                                     const TYPE*      du,                                        \
+                                     const TYPE*      B,                                         \
+                                     rocsparse_int    ldb,                                       \
+                                     size_t*          buffer_size)                               \
+    try                                                                                          \
+    {                                                                                            \
+        ROCSPARSE_ROUTINE_TRACE;                                                                 \
+        RETURN_IF_ROCSPARSE_ERROR(                                                               \
+            rocsparse::gtsv_buffer_size_template(handle, m, n, dl, d, du, B, ldb, buffer_size)); \
+        return rocsparse_status_success;                                                         \
+    }                                                                                            \
+    catch(...)                                                                                   \
+    {                                                                                            \
+        RETURN_ROCSPARSE_EXCEPTION();                                                            \
+    }
 
-// C_IMPL(rocsparse_sgtsv_buffer_size, float);
-// C_IMPL(rocsparse_dgtsv_buffer_size, double);
-// C_IMPL(rocsparse_cgtsv_buffer_size, rocsparse_float_complex);
-// C_IMPL(rocsparse_zgtsv_buffer_size, rocsparse_double_complex);
+C_IMPL(rocsparse_sgtsv_buffer_size, float);
+C_IMPL(rocsparse_dgtsv_buffer_size, double);
+C_IMPL(rocsparse_cgtsv_buffer_size, rocsparse_float_complex);
+C_IMPL(rocsparse_zgtsv_buffer_size, rocsparse_double_complex);
 
-// #undef C_IMPL
+#undef C_IMPL
 
-// #define C_IMPL(NAME, TYPE)                                                           \
-//     extern "C" rocsparse_status NAME(rocsparse_handle handle,                        \
-//                                      rocsparse_int    m,                             \
-//                                      rocsparse_int    n,                             \
-//                                      const TYPE*      dl,                            \
-//                                      const TYPE*      d,                             \
-//                                      const TYPE*      du,                            \
-//                                      TYPE*            B,                             \
-//                                      rocsparse_int    ldb,                           \
-//                                      void*            temp_buffer)                   \
-//     try                                                                              \
-//     {                                                                                \
-//         ROCSPARSE_ROUTINE_TRACE;                                                     \
-//         RETURN_IF_ROCSPARSE_ERROR(                                                   \
-//             rocsparse::gtsv_template(handle, m, n, dl, d, du, B, ldb, temp_buffer)); \
-//         return rocsparse_status_success;                                             \
-//     }                                                                                \
-//     catch(...)                                                                       \
-//     {                                                                                \
-//         RETURN_ROCSPARSE_EXCEPTION();                                                \
-//     }
+#define C_IMPL(NAME, TYPE)                                                           \
+    extern "C" rocsparse_status NAME(rocsparse_handle handle,                        \
+                                     rocsparse_int    m,                             \
+                                     rocsparse_int    n,                             \
+                                     const TYPE*      dl,                            \
+                                     const TYPE*      d,                             \
+                                     const TYPE*      du,                            \
+                                     TYPE*            B,                             \
+                                     rocsparse_int    ldb,                           \
+                                     void*            temp_buffer)                   \
+    try                                                                              \
+    {                                                                                \
+        ROCSPARSE_ROUTINE_TRACE;                                                     \
+        RETURN_IF_ROCSPARSE_ERROR(                                                   \
+            rocsparse::gtsv_template(handle, m, n, dl, d, du, B, ldb, temp_buffer)); \
+        return rocsparse_status_success;                                             \
+    }                                                                                \
+    catch(...)                                                                       \
+    {                                                                                \
+        RETURN_ROCSPARSE_EXCEPTION();                                                \
+    }
 
-// C_IMPL(rocsparse_sgtsv, float);
-// C_IMPL(rocsparse_dgtsv, double);
-// C_IMPL(rocsparse_cgtsv, rocsparse_float_complex);
-// C_IMPL(rocsparse_zgtsv, rocsparse_double_complex);
+C_IMPL(rocsparse_sgtsv, float);
+C_IMPL(rocsparse_dgtsv, double);
+C_IMPL(rocsparse_cgtsv, rocsparse_float_complex);
+C_IMPL(rocsparse_zgtsv, rocsparse_double_complex);
 
-// #undef C_IMPL
+#undef C_IMPL

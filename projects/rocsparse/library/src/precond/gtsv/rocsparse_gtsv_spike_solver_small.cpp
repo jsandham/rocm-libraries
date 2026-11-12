@@ -516,5 +516,7 @@ rocsparse_status rocsparse::gtsv_spike_solver_small_template(rocsparse_handle ha
 
 INSTANTIATE(float);
 INSTANTIATE(double);
+INSTANTIATE(rocsparse_float_complex);
+INSTANTIATE(rocsparse_double_complex);
 
 #undef INSTANTIATE
